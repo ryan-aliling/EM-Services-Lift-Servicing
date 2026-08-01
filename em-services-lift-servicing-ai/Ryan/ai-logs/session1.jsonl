@@ -1,0 +1,73 @@
+{"phase":"design",
+"prompt":
+"You are helping me set up the initial repository for a full-stack project.
+
+Your task is ONLY to generate the repository structure shown below.
+
+Do not implement application features.
+Do not invent additional folders unless they are necessary.
+Do not generate placeholder business logic.
+
+Create exactly this structure:
+
+em-services-lift-servicing/
+│
+├── design/
+│   ├── problem-statement.md
+│   ├── architecture.md
+│   ├── architecture-diagram.md
+│   ├── architecture-diagram.png
+│   ├── er-diagram.md
+│   ├── er-diagram.png
+│   └── <student-name>/
+│       ├── use-cases.md
+│       ├── api-documentation.md
+│       └── database-schema.md
+│
+├── frontend/
+│   ├── src/
+│   ├── tests/
+│   │   └── <student-name>/
+│   │       ├── test-cases.md
+│   │       └── *.test.js
+│   ├── package.json
+│   └── .env.example
+│
+├── backend/
+│   ├── src/
+│   ├── tests/
+│   │   └── <student-name>/
+│   │       ├── test-cases.md
+│   │       └── *.test.js
+│   ├── package.json
+│   └── .env.example
+│
+├── .gitignore
+├── deployment.md
+└── README.md
+
+Additionally create:
+
+em-services-lift-servicing-ai/
+└── <student-name>/
+    ├── ai-logs/
+    │   └── *.jsonl
+    └── ai-reflection.md
+
+Requirements
+
+- Create every Markdown file with an H1 title matching its filename and a short TODO section.
+- Create empty placeholder PNG files (or explain how to add them if binary file creation is unavailable).
+- Create minimal placeholder `.test.js` files that contain a TODO comment.
+- Create minimal `package.json` files for both frontend and backend.
+- Create `.env.example` files with placeholder environment variables only.
+- Create a sensible `.gitignore` for a React + Node.js project.
+- Create a README.md describing the repository structure and setup instructions.
+- Create deployment.md with headings only.
+
+Before generating files:
+1. Verify that the requested structure is understood.
+2. Point out any parts that cannot be created automatically (e.g. empty PNG binaries if unsupported).
+3. Then generate the complete directory structure and all placeholder files.",
+"output": "The full structure is generated and matches the spec",
+"action":"accepted"}

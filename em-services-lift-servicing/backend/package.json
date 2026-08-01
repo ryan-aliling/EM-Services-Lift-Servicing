@@ -1,0 +1,11 @@
+{
+  "name": "em-services-lift-servicing-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "TODO",
+    "test": "TODO"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
