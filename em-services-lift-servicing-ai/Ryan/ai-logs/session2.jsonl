@@ -1,0 +1,32 @@
+{"phase":"design",
+"prompt":
+"Set up ONLY the shared shell for a full-stack `Lift Servicing Digitisation` app.
+Do NOT implement any feature-specific CRUD logic
+
+- client/src/App.jsx, Workspace.jsx, TabBar.jsx (working tab switcher, empty content)
+- client/src/hooks/useFileUpload.js (shared S3 presign upload hook, working)
+- server/server.js (Express setup, Atlas connection, mounts routers, /api/health)
+- server/routes/uploads.js (presigned URL route, working)
+- Empty placeholder folders with a README TODO in each:
+  client/src/features/lifts/
+  client/src/features/scheduling/
+  client/src/features/inspections/
+  client/src/features/defects/
+  client/src/features/rectifications/
+  server/models/, server/routes/, server/controllers/ — same, empty per feature
+- .env.example, README.md (setup + ownership model), DEPLOYMENT.md checklist
+- seed.js stub (empty, each person adds their own seed data later)",
+"output": 
+"
+I built the shared shell on top of the existing frontend//backend/ structure already in the repo (not client//server/ — that naming didn't exist here, so I adapted to match what's already scaffolded):
+
+Frontend (React + Vite): App.jsx, TabBar.jsx, Workspace.jsx — a working tab switcher with empty per-tab content — plus hooks/useFileUpload.js (presign → direct S3 PUT with progress tracking). Verified with npm install && npm run build.
+
+Backend (Express + Mongoose): src/server.js (Atlas connection, CORS/JSON middleware, /api/health, uploads router mounted, commented-out slots for feature routers), src/routes/uploads.js (presigned S3 PUT URL endpoint via @aws-sdk/client-s3). Verified with npm install and syntax/require checks.
+
+Placeholders: frontend/src/features/{lifts,scheduling,inspections,defects,rectifications}/README.md and matching backend/src/{models,routes,controllers}/<feature>/README.md — all empty except a TODO + owner line, no CRUD logic.
+
+Config & docs: updated both .env.example files (Atlas URI, AWS S3 vars, Vite API base URL), package.json scripts/deps for both apps, backend/seed.js stub, root README.md (added a repo-structure diagram and an Ownership Model table with features listed and owners left TBD for the team to fill in), and deployment.md as a checklist.
+
+No feature-specific CRUD logic was implemented anywhere, as requested.",
+"action":"accepted"}
