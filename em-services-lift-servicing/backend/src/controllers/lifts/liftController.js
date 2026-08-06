@@ -43,15 +43,27 @@ const getLift = asyncHandler(async (req, res) => {
 
 const createLift = asyncHandler(async (req, res) => {
   assertRequiredFields(req.body);
-  const lift = await Lift.create(req.body);
+  let lift;
+  try {
+    lift = await Lift.create(req.body);
+  } catch (err) {
+    if (err.code === 11000) throw ApiError.badRequest(`Lift code "${req.body.liftCode}" already exists`);
+    throw err;
+  }
   ok(res, lift, 'Lift created', 201);
 });
 
 const updateLift = asyncHandler(async (req, res) => {
-  const lift = await Lift.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  let lift;
+  try {
+    lift = await Lift.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+  } catch (err) {
+    if (err.code === 11000) throw ApiError.badRequest(`Lift code "${req.body.liftCode}" already exists`);
+    throw err;
+  }
   if (!lift) throw ApiError.notFound('Lift not found');
   ok(res, lift, 'Lift updated');
 });

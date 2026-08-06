@@ -1,5 +1,15 @@
+import Lifts from './features/lifts/Lifts';
+
 export default function Workspace({ tabs, activeTab }) {
   const tab = tabs.find((t) => t.id === activeTab);
+
+  if (activeTab === 'lifts') {
+    return (
+      <main className="workspace">
+        <Lifts />
+      </main>
+    );
+  }
 
   return (
     <main className="workspace">
