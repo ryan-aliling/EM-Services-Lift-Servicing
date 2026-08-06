@@ -2,4 +2,4 @@
 
 TODO: implement controller logic for lift CRUD operations.
 
-Owner: TBD
+Owner: Lucio
