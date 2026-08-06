@@ -48,7 +48,7 @@ Fill in the owner for each feature below:
 | Feature | Owner |
 | --- | --- |
 | Lifts | TBD |
-| Scheduling | TBD |
+| Scheduling | Aeric |
 | Inspections | TBD |
 | Defects | TBD |
 | Rectifications | TBD |

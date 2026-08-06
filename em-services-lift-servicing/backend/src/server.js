@@ -19,12 +19,13 @@ app.get('/api/health', (req, res) => {
 
 // app.use('/api/uploads', uploadsRouter);
 
-// TODO: mount feature routers here as they're built, e.g.
-// app.use('/api/lifts', require('./routes/lifts'));
-// app.use('/api/scheduling', require('./routes/scheduling'));
-// app.use('/api/inspections', require('./routes/inspections'));
-// app.use('/api/defects', require('./routes/defects'));
-// app.use('/api/rectifications', require('./routes/rectifications'));
+app.use('/api/scheduling', require('./routes/scheduling/schedulingRoutes'));
+
+// TODO: mount remaining feature routers here as they're built, e.g.
+// app.use('/api/lifts', require('./routes/lifts/liftsRoutes'));
+// app.use('/api/inspections', require('./routes/inspections/inspectionsRoutes'));
+// app.use('/api/defects', require('./routes/defects/defectsRoutes'));
+// app.use('/api/rectifications', require('./routes/rectifications/rectificationsRoutes'));
 
 mongoose
   .connect(process.env.DATABASE_URL)
