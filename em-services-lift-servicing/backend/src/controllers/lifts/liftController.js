@@ -1,7 +1,7 @@
-const Lift = require('../models/Lift');
-const ApiError = require('../utils/ApiError');
-const asyncHandler = require('../utils/asyncHandler');
-const { ok } = require('../utils/apiResponse');
+const Lift = require('../../models/lifts/Lift');
+const ApiError = require('../../utils/ApiError');
+const asyncHandler = require('../../utils/asyncHandler');
+const { ok } = require('../../utils/apiResponse');
 
 const REQUIRED_FIELDS = ['liftCode', 'block', 'unit', 'type', 'capacity'];
 

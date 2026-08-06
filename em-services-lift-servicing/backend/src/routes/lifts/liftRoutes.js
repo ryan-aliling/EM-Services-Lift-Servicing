@@ -6,17 +6,17 @@ const {
   createLift,
   updateLift,
   deleteLift,
-} = require('../controllers/liftController');
-const { requireAuth, requireRole } = require('../middleware/auth');
+} = require('../../controllers/lifts/liftController');
 
+// TODO: re-add requireAuth / requireRole('Admin', 'Manager') on write routes
+// once a login system exists and issues JWTs with a `role` claim.
 const router = express.Router();
 
-router.use(requireAuth);
 router.get('/', listLifts);
 router.get('/stats', liftStats);
 router.get('/:id', getLift);
-router.post('/', requireRole('Admin', 'Manager'), createLift);
-router.put('/:id', requireRole('Admin', 'Manager'), updateLift);
-router.delete('/:id', requireRole('Admin', 'Manager'), deleteLift);
+router.post('/', createLift);
+router.put('/:id', updateLift);
+router.delete('/:id', deleteLift);
 
 module.exports = router;
