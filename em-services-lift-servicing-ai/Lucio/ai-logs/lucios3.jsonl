@@ -19,6 +19,17 @@ Workspace — Workspace.jsx now centers content with a max-width, and unbuilt ta
 
 Lifts page polish — StatCard.jsx now gives each stat a tinted icon badge instead of a bare icon; Lifts.jsx got a subtitle under the page title, a bordered grid container, and a proper empty state ("No lifts match the current filters") instead of a blank grid.
 
-Verified with npm run build (succeeds) and confirmed both dev servers respond after restart. Reload localhost:3000 — try the moon icon in the header to check dark mode."
+Verified with npm run build (succeeds) and confirmed both dev servers respond after restart. Reload localhost:3000 — try the moon icon in the header to check dark mode.",
 
+"phase": "backend and frontend",
+"prompt": "can u add a csv only import feature",
+"output": "Backend — new POST /api/lifts/import endpoint (liftController.js, wired in liftRoutes.js). It takes { rows: [...] }, creates each row individually (not insertMany) so one bad row doesn't sink the batch, and returns { created, failed: [{ row, liftCode, message }] } — verified live with a duplicate-code and missing-field row, both correctly rejected with per-row reasons while the valid row succeeded.
+
+Frontend — in the Lifts page (Lifts.jsx):
+
+Import CSV button next to Export, gated behind canEdit like Add/Edit/Delete already are.
+The file picker is restricted to .csv — and even if a browser allows picking something else, Lifts.jsx explicitly rejects any filename not ending in .csv with an error toast before it ever reaches the parser. That's the "CSV only" part.
+utils/csvImport.js: a small hand-rolled CSV parser (handles quoted/escaped fields) plus a header-alias map so both machine (liftCode) and human (Lift Code) column names are recognized.
+A "Download the CSV template" link under the page title, so users know the expected columns without guessing.
+An Import Results dialog reporting how many rows succeeded and listing exactly which rows failed and why."
 }

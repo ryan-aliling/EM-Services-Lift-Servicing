@@ -74,4 +74,33 @@ const deleteLift = asyncHandler(async (req, res) => {
   ok(res, null, 'Lift deleted');
 });
 
-module.exports = { listLifts, liftStats, getLift, createLift, updateLift, deleteLift };
+// Bulk-creates lifts from CSV rows already parsed into plain objects on the frontend
+// (see frontend/src/utils/csvImport.js). Rows are created one at a time — rather than
+// Lift.insertMany — so a bad row (missing field, duplicate liftCode) doesn't abort the
+// whole batch and we can report exactly which row failed and why.
+const importLifts = asyncHandler(async (req, res) => {
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw ApiError.badRequest('No rows to import');
+  }
+
+  const failed = [];
+  let created = 0;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    try {
+      assertRequiredFields(row);
+      await Lift.create(row);
+      created += 1;
+    } catch (err) {
+      const message = err.code === 11000 ? `Lift code "${row.liftCode}" already exists` : err.message;
+      // +2: row 0 is the first data row, and the CSV header itself takes line 1.
+      failed.push({ row: i + 2, liftCode: row.liftCode || '', message });
+    }
+  }
+
+  ok(res, { created, failed }, `Imported ${created} of ${rows.length} lift(s)`);
+});
+
+module.exports = { listLifts, liftStats, getLift, createLift, updateLift, deleteLift, importLifts };
