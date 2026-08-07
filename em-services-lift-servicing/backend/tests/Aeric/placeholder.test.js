@@ -1,0 +1,154 @@
+// Scheduling API tests (Aeric). See test-cases.md for the full test plan.
+//
+// Uses an in-memory MongoDB (mongodb-memory-server) so this suite never
+// touches the real Atlas DATABASE_URL, and mounts only the scheduling router
+// on a bare Express app rather than requiring src/server.js (which connects
+// to Mongo / calls app.listen as a side effect of being required).
+const request = require('supertest');
+const express = require('express');
+const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+
+const schedulingRoutes = require('../../src/routes/scheduling/schedulingRoutes');
+
+function buildTestApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/scheduling', schedulingRoutes);
+  return app;
+}
+
+const validPayload = {
+  townCouncil: 'Tampines Town Council',
+  liftCompany: 'ABC Lifts Pte Ltd',
+  blockAddress: 'Blk 201 Tampines St 21',
+  scheduledDate: '2026-09-01',
+  assignedInspector: 'John Tan',
+};
+
+let mongod;
+let app;
+
+beforeAll(async () => {
+  mongod = await MongoMemoryServer.create();
+  await mongoose.connect(mongod.getUri());
+  app = buildTestApp();
+});
+
+afterEach(async () => {
+  const { collections } = mongoose.connection;
+  await Promise.all(Object.values(collections).map((collection) => collection.deleteMany({})));
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
+  await mongod.stop();
+});
+
+describe('POST /api/scheduling', () => {
+  test('creates a schedule with default status Scheduled', async () => {
+    const res = await request(app).post('/api/scheduling').send(validPayload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('Scheduled');
+    expect(res.body.townCouncil).toBe(validPayload.townCouncil);
+    expect(res.body.isDeleted).toBe(false);
+  });
+
+  test('rejects a payload missing required fields', async () => {
+    const res = await request(app).post('/api/scheduling').send({ townCouncil: 'Tampines Town Council' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/required/i);
+  });
+});
+
+describe('GET /api/scheduling', () => {
+  test('lists schedules sorted by scheduledDate ascending', async () => {
+    await request(app).post('/api/scheduling').send({ ...validPayload, scheduledDate: '2026-09-15' });
+    await request(app)
+      .post('/api/scheduling')
+      .send({ ...validPayload, blockAddress: 'Blk 202', scheduledDate: '2026-08-20' });
+
+    const res = await request(app).get('/api/scheduling');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(new Date(res.body[0].scheduledDate).getTime()).toBeLessThan(
+      new Date(res.body[1].scheduledDate).getTime()
+    );
+  });
+
+  test('filters by status', async () => {
+    const created = await request(app).post('/api/scheduling').send(validPayload);
+    await request(app).put(`/api/scheduling/${created.body._id}`).send({ status: 'Assigned' });
+    await request(app).post('/api/scheduling').send({ ...validPayload, blockAddress: 'Blk 203' });
+
+    const res = await request(app).get('/api/scheduling').query({ status: 'Assigned' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].status).toBe('Assigned');
+  });
+});
+
+describe('GET /api/scheduling/:id', () => {
+  test('returns 400 for a malformed id', async () => {
+    const res = await request(app).get('/api/scheduling/not-a-valid-id');
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 404 for a well-formed but unknown id', async () => {
+    const unknownId = new mongoose.Types.ObjectId();
+    const res = await request(app).get(`/api/scheduling/${unknownId}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('PUT /api/scheduling/:id', () => {
+  test('rejects an invalid status value and leaves the record unchanged', async () => {
+    const created = await request(app).post('/api/scheduling').send(validPayload);
+
+    const res = await request(app).put(`/api/scheduling/${created.body._id}`).send({ status: 'Bogus' });
+    expect(res.status).toBe(400);
+
+    const check = await request(app).get(`/api/scheduling/${created.body._id}`);
+    expect(check.body.status).toBe('Scheduled');
+  });
+
+  test('accepts a valid status transition', async () => {
+    const created = await request(app).post('/api/scheduling').send(validPayload);
+
+    const res = await request(app)
+      .put(`/api/scheduling/${created.body._id}`)
+      .send({ status: 'Assigned', assignedInspector: 'Jane Lim' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('Assigned');
+    expect(res.body.assignedInspector).toBe('Jane Lim');
+  });
+});
+
+describe('DELETE /api/scheduling/:id', () => {
+  test('soft deletes: hides the record from reads but keeps it in the collection', async () => {
+    const created = await request(app).post('/api/scheduling').send(validPayload);
+
+    const del = await request(app).delete(`/api/scheduling/${created.body._id}`);
+    expect(del.status).toBe(200);
+
+    const getRes = await request(app).get(`/api/scheduling/${created.body._id}`);
+    expect(getRes.status).toBe(404);
+
+    const rawDoc = await mongoose.connection
+      .collection('schedules')
+      .findOne({ _id: new mongoose.Types.ObjectId(created.body._id) });
+    expect(rawDoc).not.toBeNull();
+    expect(rawDoc.isDeleted).toBe(true);
+  });
+
+  test('returns 404 when deleting an unknown id', async () => {
+    const unknownId = new mongoose.Types.ObjectId();
+    const res = await request(app).delete(`/api/scheduling/${unknownId}`);
+    expect(res.status).toBe(404);
+  });
+});
