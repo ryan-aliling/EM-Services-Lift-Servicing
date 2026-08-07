@@ -17,17 +17,30 @@ export const SCHEDULE_STATUS_COLORS = {
   Cancelled: 'default',
 };
 
-// Placeholder maps below: the Inspections/Defects/Rectifications modules
-// (backend/src/{routes,controllers,models}/...) aren't built yet, so their real status
-// enums don't exist. StatusChip falls back to a gray "default" chip for any value not
-// listed here, so these are safe placeholders to refine once each module lands.
-
+// Inspections module has landed (backend/src/models/inspections/Inspection.js) - matches
+// its real overallStatus enum. `compliance` (Pass / Defect Found) uses its own inline
+// colours in Inspections.jsx rather than this map, since it's a separate field.
 export const INSPECTION_STATUS_COLORS = {
-  Pass: 'success',
-  Fail: 'error',
-  Pending: 'warning',
+  Draft: 'default',
+  Submitted: 'info',
+  'Under Review': 'warning',
+  Closed: 'success',
 };
 
+export const DEFECT_SEVERITY_COLORS = {
+  Minor: 'warning',
+  Major: 'warning',
+  Critical: 'error',
+};
+
+export const DEFECT_COMPLIANCE_COLORS = {
+  Pass: 'success',
+  'Defect Found': 'error',
+};
+
+// Defects/Rectifications modules aren't built yet, so these two are still placeholder
+// enums - safe to refine once each module lands (StatusChip falls back to a gray
+// "default" chip for any value not listed here).
 export const DEFECT_STATUS_COLORS = {
   Open: 'error',
   'In Progress': 'warning',
