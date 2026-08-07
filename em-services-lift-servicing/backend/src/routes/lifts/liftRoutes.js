@@ -6,6 +6,7 @@ const {
   createLift,
   updateLift,
   deleteLift,
+  importLifts,
 } = require('../../controllers/lifts/liftController');
 
 // TODO: re-add requireAuth / requireRole('Admin', 'Manager') on write routes
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.get('/', listLifts);
 router.get('/stats', liftStats);
+router.post('/import', importLifts);
 router.get('/:id', getLift);
 router.post('/', createLift);
 router.put('/:id', updateLift);

@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSnackbar } from 'notistack';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   IconButton,
   MenuItem,
@@ -16,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/DownloadOutlined';
+import UploadIcon from '@mui/icons-material/UploadFileOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined';
 import ElevatorIcon from '@mui/icons-material/ElevatorOutlined';
 import BuildIcon from '@mui/icons-material/BuildOutlined';
@@ -30,8 +35,21 @@ import * as liftApi from '../../api/liftApi';
 import { LIFT_TYPES, LIFT_STATUSES, isServiceDue } from '../../utils/liftHelpers';
 import { formatDate } from '../../utils/formatDate';
 import { exportToCSV } from '../../utils/csvExport';
+import { parseCSV, rowsToLiftPayloads } from '../../utils/csvImport';
 import { LIFT_STATUS_COLORS } from '../../theme/statusColors';
 import { useAuth } from '../../context/AuthContext';
+
+const IMPORT_TEMPLATE_COLUMNS = [
+  { label: 'Lift Code', value: (l) => l.liftCode },
+  { label: 'Block', value: (l) => l.block },
+  { label: 'Unit', value: (l) => l.unit },
+  { label: 'Type', value: (l) => l.type },
+  { label: 'Capacity', value: (l) => l.capacity },
+  { label: 'Status', value: (l) => l.status },
+  { label: 'Manufacturer', value: (l) => l.manufacturer },
+  { label: 'Install Date', value: (l) => l.installDate },
+  { label: 'Last Serviced', value: (l) => l.lastServiced },
+];
 
 export default function Lifts() {
   const { user } = useAuth();
@@ -49,6 +67,10 @@ export default function Lifts() {
   const [editingLift, setEditingLift] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewingLift, setViewingLift] = useState(null);
+
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -121,6 +143,63 @@ export default function Lifts() {
     ]);
   };
 
+  const handleDownloadTemplate = () => {
+    exportToCSV(
+      'lifts-import-template.csv',
+      [
+        {
+          liftCode: 'LIFT-001',
+          block: 'A',
+          unit: '01-01',
+          type: 'Passenger',
+          capacity: 800,
+          status: 'Active',
+          manufacturer: 'Otis',
+          installDate: '2020-01-15',
+          lastServiced: '2026-05-01',
+        },
+      ],
+      IMPORT_TEMPLATE_COLUMNS
+    );
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so re-selecting the same file still fires onChange
+
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      enqueueSnackbar('Only .csv files are supported', { variant: 'error' });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const payloads = rowsToLiftPayloads(parseCSV(text));
+      if (!payloads.length) {
+        enqueueSnackbar('No data rows found in that CSV', { variant: 'warning' });
+        return;
+      }
+
+      const result = await liftApi.importLifts(payloads);
+      setImportResult({ ...result, total: payloads.length });
+      enqueueSnackbar(
+        result.failed.length
+          ? `Imported ${result.created} of ${payloads.length} lift(s) — ${result.failed.length} failed`
+          : `Imported ${result.created} lift(s)`,
+        { variant: result.failed.length ? 'warning' : 'success' }
+      );
+      load();
+    } catch (err) {
+      enqueueSnackbar(err.response?.data?.message || 'Failed to import CSV', { variant: 'error' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const columns = [
     { field: 'liftCode', headerName: 'Lift Code', width: 130, fontWeight: 600 },
     { field: 'block', headerName: 'Block', width: 100 },
@@ -183,23 +262,55 @@ export default function Lifts() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Lift Management</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <Box>
+          <Typography variant="h4">Lift Management</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Track lift assets, service status, and maintenance history.
+          </Typography>
+          {canEdit && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Importing lifts?{' '}
+              <Button
+                size="small"
+                onClick={handleDownloadTemplate}
+                sx={{ p: 0, minWidth: 0, fontSize: 'inherit', verticalAlign: 'baseline' }}
+              >
+                Download the CSV template
+              </Button>
+            </Typography>
+          )}
+        </Box>
         <Stack direction="row" spacing={1.5}>
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
           </Button>
           {canEdit && (
-            <Button
-              startIcon={<AddIcon />}
-              variant="contained"
-              onClick={() => {
-                setEditingLift(null);
-                setFormOpen(true);
-              }}
-            >
-              Add Lift
-            </Button>
+            <>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleFileSelected} />
+              <Tooltip title="Import lifts from a .csv file">
+                <span>
+                  <Button
+                    startIcon={<UploadIcon />}
+                    variant="outlined"
+                    onClick={handleImportClick}
+                    disabled={importing}
+                  >
+                    {importing ? 'Importing…' : 'Import CSV'}
+                  </Button>
+                </span>
+              </Tooltip>
+              <Button
+                startIcon={<AddIcon />}
+                variant="contained"
+                onClick={() => {
+                  setEditingLift(null);
+                  setFormOpen(true);
+                }}
+              >
+                Add Lift
+              </Button>
+            </>
           )}
         </Stack>
       </Stack>
@@ -262,7 +373,15 @@ export default function Lifts() {
         </TextField>
       </Stack>
 
-      <Box sx={{ height: 560, bgcolor: 'background.paper', borderRadius: 2 }}>
+      <Box
+        sx={{
+          height: 560,
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          border: 1,
+          borderColor: 'divider',
+        }}
+      >
         <DataGrid
           rows={filteredLifts}
           columns={columns}
@@ -271,6 +390,8 @@ export default function Lifts() {
           disableRowSelectionOnClick
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          sx={{ border: 'none' }}
+          slots={{ noRowsOverlay: LiftsEmptyState }}
         />
       </Box>
 
@@ -295,6 +416,50 @@ export default function Lifts() {
       />
 
       <LiftDetailDialog open={Boolean(viewingLift)} lift={viewingLift} onClose={() => setViewingLift(null)} />
+
+      <ImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
     </Box>
+  );
+}
+
+function LiftsEmptyState() {
+  return (
+    <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height: '100%', color: 'text.secondary' }}>
+      <ElevatorIcon sx={{ fontSize: 32 }} />
+      <Typography variant="body2">No lifts match the current filters.</Typography>
+    </Stack>
+  );
+}
+
+function ImportResultDialog({ result, onClose }) {
+  if (!result) return null;
+  const { created, total, failed } = result;
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Import Results</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: failed.length ? 2 : 0 }}>
+          Imported <strong>{created}</strong> of <strong>{total}</strong> row(s).
+        </Typography>
+        {failed.length > 0 && (
+          <Stack spacing={1}>
+            <Typography variant="subtitle2" color="error">
+              {failed.length} row(s) failed:
+            </Typography>
+            {failed.map((f) => (
+              <Typography key={f.row} variant="body2" color="text.secondary">
+                Row {f.row}{f.liftCode ? ` (${f.liftCode})` : ''}: {f.message}
+              </Typography>
+            ))}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} variant="contained">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
