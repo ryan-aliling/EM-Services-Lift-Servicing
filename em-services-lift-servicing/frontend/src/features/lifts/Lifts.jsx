@@ -183,8 +183,13 @@ export default function Lifts() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Lift Management</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <Box>
+          <Typography variant="h4">Lift Management</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Track lift assets, service status, and maintenance history.
+          </Typography>
+        </Box>
         <Stack direction="row" spacing={1.5}>
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
@@ -262,7 +267,15 @@ export default function Lifts() {
         </TextField>
       </Stack>
 
-      <Box sx={{ height: 560, bgcolor: 'background.paper', borderRadius: 2 }}>
+      <Box
+        sx={{
+          height: 560,
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          border: 1,
+          borderColor: 'divider',
+        }}
+      >
         <DataGrid
           rows={filteredLifts}
           columns={columns}
@@ -271,6 +284,8 @@ export default function Lifts() {
           disableRowSelectionOnClick
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          sx={{ border: 'none' }}
+          slots={{ noRowsOverlay: LiftsEmptyState }}
         />
       </Box>
 
@@ -296,5 +311,14 @@ export default function Lifts() {
 
       <LiftDetailDialog open={Boolean(viewingLift)} lift={viewingLift} onClose={() => setViewingLift(null)} />
     </Box>
+  );
+}
+
+function LiftsEmptyState() {
+  return (
+    <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height: '100%', color: 'text.secondary' }}>
+      <ElevatorIcon sx={{ fontSize: 32 }} />
+      <Typography variant="body2">No lifts match the current filters.</Typography>
+    </Stack>
   );
 }

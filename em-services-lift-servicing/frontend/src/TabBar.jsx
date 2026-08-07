@@ -1,16 +1,22 @@
+import { Tabs, Tab } from '@mui/material';
+
 export default function TabBar({ tabs, activeTab, onTabChange }) {
+  // Tabs throws if `value` doesn't match any Tab's `value` — guard against a
+  // not-yet-known activeTab (e.g. mid-navigation) instead of crashing the shell.
+  const value = tabs.some((t) => t.id === activeTab) ? activeTab : false;
+
   return (
-    <nav className="tab-bar">
+    <Tabs
+      value={value}
+      onChange={(_, id) => onTabChange(id)}
+      variant="scrollable"
+      scrollButtons="auto"
+      allowScrollButtonsMobile
+      sx={{ px: { xs: 1, sm: 3 }, minHeight: 44 }}
+    >
       {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className={`tab-button${tab.id === activeTab ? ' active' : ''}`}
-          onClick={() => onTabChange(tab.id)}
-        >
-          {tab.label}
-        </button>
+        <Tab key={tab.id} value={tab.id} label={tab.label} sx={{ minHeight: 44 }} />
       ))}
-    </nav>
+    </Tabs>
   );
 }
