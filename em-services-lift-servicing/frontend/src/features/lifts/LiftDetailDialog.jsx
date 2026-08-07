@@ -84,10 +84,7 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
               navigate('/scheduling');
             }}
             render={(s) => (
-              <ListItemText
-                primary={`${s.scheduleNo} — ${s.contractor}`}
-                secondary={formatDate(s.serviceDate)}
-              />
+              <ListItemText primary={`${s.blockAddress} — ${s.liftCompany}`} secondary={formatDate(s.scheduledDate)} />
             )}
             status={(s) => <StatusChip value={s.status} colorMap={SCHEDULE_STATUS_COLORS} />}
           />

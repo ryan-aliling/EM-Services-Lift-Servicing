@@ -17,10 +17,13 @@
     "@mui/material": "^6.5.0",
     "@mui/x-data-grid": "^7.29.13",
     "axios": "^1.19.0",
+    "chart.js": "^4.4.4",
     "dayjs": "^1.11.21",
     "formik": "^2.4.9",
+    "jspdf": "^2.5.2",
     "notistack": "^3.0.2",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.2",
     "yup": "^1.7.1"
