@@ -1,32 +1,25 @@
+import { Step, StepLabel, Stepper } from '@mui/material';
+import StatusChip from '../../components/StatusChip';
+
 // Visual progress indicator — client feedback: "easy user flow", staff should
 // always know "where is this job right now" the way a Grab/Shopee tracker works.
+// Built on MUI's Stepper for the same look/feel as the rest of the app.
 const STEPS = ['Scheduled', 'Assigned', 'In Progress', 'Completed'];
 
 export default function StatusStepper({ status }) {
   if (status === 'Cancelled') {
-    return (
-      <div className="status-stepper status-stepper--cancelled">
-        <span className="status-pill status-pill--cancelled">Cancelled</span>
-      </div>
-    );
+    return <StatusChip value="Cancelled" colorMap={{ Cancelled: 'default' }} />;
   }
 
-  const currentIndex = STEPS.indexOf(status);
+  const activeStep = STEPS.indexOf(status);
 
   return (
-    <ol className="status-stepper">
-      {STEPS.map((step, index) => {
-        let state = 'pending';
-        if (index < currentIndex) state = 'done';
-        else if (index === currentIndex) state = 'current';
-
-        return (
-          <li key={step} className={`status-step status-step--${state}`}>
-            <span className="status-step__marker">{state === 'done' ? '✓' : index + 1}</span>
-            <span className="status-step__label">{step}</span>
-          </li>
-        );
-      })}
-    </ol>
+    <Stepper activeStep={activeStep} alternativeLabel sx={{ minWidth: 320 }}>
+      {STEPS.map((step) => (
+        <Step key={step}>
+          <StepLabel>{step}</StepLabel>
+        </Step>
+      ))}
+    </Stepper>
   );
 }
