@@ -1,8 +1,14 @@
 require('dotenv').config();
 
+const dns = require('dns');
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+
+// Some routers/ISPs proxy DNS in a way that breaks Node's SRV lookups
+// (used by mongodb+srv:// URIs) even though the OS resolver works fine.
+// Pointing Node directly at public DNS resolvers avoids that.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 // TODO: re-enable once AWS_REGION/AWS_ACCESS_KEY_ID/etc. are set in .env — the S3 client crashes on import without them
 // const uploadsRouter = require('./routes/uploads');
