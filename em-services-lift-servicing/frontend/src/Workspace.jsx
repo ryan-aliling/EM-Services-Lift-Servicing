@@ -4,6 +4,7 @@ import SchedulingPage from './features/scheduling/SchedulingPage';
 // Each feature owner mounts their page component here under their tab id.
 // Tabs without an entry yet fall back to the "coming soon" placeholder.
 const FEATURE_PAGES = {
+  lifts: Lifts,
   scheduling: SchedulingPage,
 };
 
@@ -14,7 +15,6 @@ export default function Workspace({ tabs, activeTab }) {
   if (FeaturePage) {
     return (
       <main className="workspace">
-        <Lifts />
         <FeaturePage />
       </main>
     );
