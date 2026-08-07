@@ -1,3 +1,4 @@
+import Lifts from "./features/lifts/Lifts"
 import SchedulingPage from './features/scheduling/SchedulingPage';
 
 // Each feature owner mounts their page component here under their tab id.
@@ -13,6 +14,7 @@ export default function Workspace({ tabs, activeTab }) {
   if (FeaturePage) {
     return (
       <main className="workspace">
+        <Lifts />
         <FeaturePage />
       </main>
     );
