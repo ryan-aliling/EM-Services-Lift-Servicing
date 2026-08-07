@@ -6,10 +6,12 @@ import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import TabBar from './TabBar';
 import Workspace from './Workspace';
+import NotificationBell from './components/NotificationBell';
 import { useThemeMode } from './context/ThemeModeContext';
 import { useAuth } from './context/AuthContext';
 
 export const TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'lifts', label: 'Lifts' },
   { id: 'scheduling', label: 'Scheduling' },
   { id: 'inspections', label: 'Inspections' },
@@ -49,6 +51,8 @@ export default function App() {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
             Lift Servicing Digitisation
           </Typography>
+
+          <NotificationBell />
 
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <IconButton onClick={toggleMode} color="inherit" aria-label="Toggle color mode">

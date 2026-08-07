@@ -13,6 +13,10 @@ export default function LiftSelect({ value, onChange, error, helperText, label =
   useEffect(() => {
     fetchLifts()
       .then(setLifts)
+      // Lifts might not be mounted in server.js yet (each feature owner mounts
+      // their own router) — degrade to an empty picker instead of an unhandled
+      // rejection so forms embedding this can still be used with manual entry.
+      .catch(() => setLifts([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -26,7 +30,10 @@ export default function LiftSelect({ value, onChange, error, helperText, label =
       value={selected}
       getOptionLabel={(lift) => `${lift.liftCode} — Blk ${lift.block}, ${lift.unit}`}
       isOptionEqualToValue={(option, val) => option._id === val._id}
-      onChange={(_e, newValue) => onChange(newValue ? newValue._id : '')}
+      // Second onChange arg passes the full lift record (beyond just its id)
+      // so consuming forms can auto-fill dependent fields (e.g. Scheduling
+      // copying the lift's block into its own Block/Lift Address field).
+      onChange={(_e, newValue) => onChange(newValue ? newValue._id : '', newValue)}
       renderInput={(params) => (
         <TextField {...params} label={label} error={error} helperText={helperText} />
       )}

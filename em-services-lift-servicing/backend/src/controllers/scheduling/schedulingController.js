@@ -1,4 +1,5 @@
 const Schedule = require('../../models/scheduling/Schedule');
+const { ok } = require('../../utils/apiResponse');
 
 // GET /api/scheduling
 // Supports optional ?status=Scheduled and ?date=2026-08-06 filters so the
@@ -20,7 +21,7 @@ async function listSchedules(req, res) {
     }
 
     const schedules = await Schedule.find(filter).sort({ scheduledDate: 1 });
-    res.json(schedules);
+    ok(res, schedules);
   } catch (err) {
     console.error('listSchedules error:', err);
     res.status(500).json({ error: 'Failed to fetch schedules' });
@@ -34,7 +35,7 @@ async function getSchedule(req, res) {
     if (!schedule) {
       return res.status(404).json({ error: 'Schedule not found' });
     }
-    res.json(schedule);
+    ok(res, schedule);
   } catch (err) {
     console.error('getSchedule error:', err);
     res.status(400).json({ error: 'Invalid schedule id' });
@@ -61,7 +62,7 @@ async function createSchedule(req, res) {
       notes,
     });
 
-    res.status(201).json(schedule);
+    ok(res, schedule, 'Schedule created', 201);
   } catch (err) {
     console.error('createSchedule error:', err);
     res.status(400).json({ error: 'Failed to create schedule' });
@@ -89,7 +90,7 @@ async function updateSchedule(req, res) {
       return res.status(404).json({ error: 'Schedule not found' });
     }
 
-    res.json(schedule);
+    ok(res, schedule);
   } catch (err) {
     console.error('updateSchedule error:', err);
     res.status(400).json({ error: 'Failed to update schedule' });
@@ -109,7 +110,7 @@ async function deleteSchedule(req, res) {
       return res.status(404).json({ error: 'Schedule not found' });
     }
 
-    res.json({ message: 'Schedule deleted', id: schedule._id });
+    ok(res, { id: schedule._id }, 'Schedule deleted');
   } catch (err) {
     console.error('deleteSchedule error:', err);
     res.status(400).json({ error: 'Failed to delete schedule' });

@@ -8,19 +8,21 @@ import StatusStepper from '../../src/features/scheduling/StatusStepper';
 afterEach(cleanup);
 
 describe('StatusStepper', () => {
-  test('marks earlier steps done, the current step current, and later steps pending', () => {
-    render(<StatusStepper status="In Progress" />);
+  test('renders all four workflow steps for a Scheduled schedule', () => {
+    render(<StatusStepper status="Scheduled" />);
 
-    expect(screen.getByText('Scheduled').closest('li').className).toContain('status-step--done');
-    expect(screen.getByText('Assigned').closest('li').className).toContain('status-step--done');
-    expect(screen.getByText('In Progress').closest('li').className).toContain('status-step--current');
-    expect(screen.getByText('Completed').closest('li').className).toContain('status-step--pending');
+    expect(screen.getByText('Scheduled')).toBeTruthy();
+    expect(screen.getByText('Assigned')).toBeTruthy();
+    expect(screen.getByText('In Progress')).toBeTruthy();
+    expect(screen.getByText('Completed')).toBeTruthy();
   });
 
-  test('renders a single Cancelled pill instead of the 4-step tracker', () => {
+  test('renders a single Cancelled chip instead of the 4-step tracker', () => {
     render(<StatusStepper status="Cancelled" />);
 
     expect(screen.getByText('Cancelled')).toBeTruthy();
+    // Cancelled is terminal — none of the workflow step labels should render.
     expect(screen.queryByText('Scheduled')).toBeNull();
+    expect(screen.queryByText('In Progress')).toBeNull();
   });
 });

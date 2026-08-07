@@ -2,10 +2,16 @@ import { Box, Stack, Typography } from '@mui/material';
 import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
 import Lifts from './features/lifts/Lifts';
 import SchedulingPage from './features/scheduling/SchedulingPage';
+import DashboardPage from './features/dashboard/DashboardPage';
 
 // Each feature owner mounts their page component here under their tab id.
 // Tabs without an entry yet fall back to the "coming soon" placeholder.
+// NOTE: this previously rendered <Lifts /> unconditionally underneath
+// whichever page matched FEATURE_PAGES (so the Scheduling tab was showing
+// the full Lifts grid stacked above SchedulingPage) — keyed properly here
+// so each tab renders only its own feature.
 const FEATURE_PAGES = {
+  dashboard: DashboardPage,
   lifts: Lifts,
   scheduling: SchedulingPage,
 };
