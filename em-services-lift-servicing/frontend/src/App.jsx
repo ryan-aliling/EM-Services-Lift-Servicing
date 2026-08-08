@@ -10,13 +10,14 @@ import NotificationBell from './components/NotificationBell';
 import { useThemeMode } from './context/ThemeModeContext';
 import { useAuth } from './context/AuthContext';
 
+// Scheduling, Inspections, Defects and Rectifications used to be four separate tabs.
+// They're now one guided "Lift Workflow" tab (see features/lift-workflow/LiftWorkflowPage.jsx) -
+// search/select a lift, then step through all four in sequence. The four modules' CRUD/API
+// stay fully separate; only the navigation/UX is combined.
 export const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'lifts', label: 'Lifts' },
-  { id: 'scheduling', label: 'Scheduling' },
-  { id: 'inspections', label: 'Inspections' },
-  { id: 'defects', label: 'Defects' },
-  { id: 'rectifications', label: 'Rectifications' },
+  { id: 'lift-workflow', label: 'Lift Workflow' },
 ];
 
 function initials(name = '') {

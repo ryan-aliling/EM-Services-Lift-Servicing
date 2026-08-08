@@ -50,13 +50,15 @@ const schema = Yup.object({
 // Same dialog handles both Create and full Edit - editing intentionally allows
 // correcting ANY field (title, location, severity, etc.), not just status, so a
 // wrong initial entry can be fixed later. See defectController.js updateDefect.
-export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
+export default function DefectFormDialog({ open, defect, onClose, onSubmit, initialLiftId }) {
   const isEdit = Boolean(defect);
   // Status can only move to a valid next step from wherever it currently is -
   // mirrors the backend's VALID_TRANSITIONS so the UI never offers a change the
   // server would reject. On create, the field isn't shown at all (always starts Open).
   const nextStatusOptions = isEdit ? DEFECT_NEXT_STATUSES[defect.status] || [] : [];
 
+  // initialLiftId presets (and, below, locks) the lift picker for a fresh defect logged
+  // from the Lift Workflow page's Defects step — ignored once `defect` (edit mode) is set.
   const formik = useFormik({
     enableReinitialize: true,
     initialValues: defect
@@ -65,7 +67,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
           ...defect,
           liftId: defect.liftId || '',
         }
-      : emptyDefect,
+      : { ...emptyDefect, liftId: initialLiftId || '' },
     validationSchema: schema,
     onSubmit: async (values, { setSubmitting }) => {
       try {
@@ -132,6 +134,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                 value={formik.values.liftId}
                 onChange={(id) => formik.setFieldValue('liftId', id)}
                 label="Lift"
+                disabled={Boolean(initialLiftId) && !isEdit}
               />
             </Grid>
             <Grid size={isEdit ? 6 : 12}>

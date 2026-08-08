@@ -1,43 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSnackbar } from 'notistack';
-import {
-  Box,
-  Button,
-  Grid,
-  IconButton,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Button, IconButton, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/DownloadOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
-import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
-import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import StatCard from '../../components/StatCard';
-import StatusChip from '../../components/StatusChip';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import DefectFormDialog from './DefectFormDialog';
-import * as defectApi from '../../api/defectApi';
-import { DEFECT_SEVERITIES, DEFECT_STATUSES } from '../../utils/defectHelpers';
-import { formatDate } from '../../utils/formatDate';
-import { exportToCSV } from '../../utils/csvExport';
-import { DEFECT_CSV_COLUMNS } from './defectCsvColumns';
-import { DEFECT_STATUS_COLORS, DEFECT_SEVERITY_COLORS } from '../../theme/statusColors';
-import { useAuth } from '../../context/AuthContext';
+import StatusChip from '../../../components/StatusChip';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import DefectFormDialog from '../../defects/DefectFormDialog';
+import * as defectApi from '../../../api/defectApi';
+import { DEFECT_SEVERITIES, DEFECT_STATUSES } from '../../../utils/defectHelpers';
+import { formatDate } from '../../../utils/formatDate';
+import { exportToCSV } from '../../../utils/csvExport';
+import { DEFECT_CSV_COLUMNS } from '../../defects/defectCsvColumns';
+import { DEFECT_STATUS_COLORS, DEFECT_SEVERITY_COLORS } from '../../../theme/statusColors';
+import { useAuth } from '../../../context/AuthContext';
 
-export default function Defects() {
+// Step 3 of the Lift Workflow - same CRUD/API as the standalone Defects page, scoped down
+// to defects linked to the currently selected lift. A fresh defect logged here already
+// carries this lift's id (DefectFormDialog's initialLiftId), ready for Step 4 to rectify.
+export default function DefectsStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const canEdit = user.role === 'Admin' || user.role === 'Manager';
 
   const [defects, setDefects] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -50,12 +39,8 @@ export default function Defects() {
   const load = async () => {
     setLoading(true);
     try {
-      const [defectList, defectStats] = await Promise.all([
-        defectApi.fetchDefects(),
-        defectApi.fetchDefectStats(),
-      ]);
+      const defectList = await defectApi.fetchDefects();
       setDefects(defectList);
-      setStats(defectStats);
     } catch {
       enqueueSnackbar('Failed to load defects - is the backend running?', { variant: 'error' });
     } finally {
@@ -68,17 +53,19 @@ export default function Defects() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const liftDefects = useMemo(() => defects.filter((d) => d.liftId === lift._id), [defects, lift._id]);
+
   const filteredDefects = useMemo(() => {
-    return defects.filter((defect) => {
+    return liftDefects.filter((defect) => {
       if (statusFilter && defect.status !== statusFilter) return false;
       if (severityFilter && defect.severity !== severityFilter) return false;
       if (search) {
-        const haystack = `${defect.defectNo} ${defect.title} ${defect.location} ${defect.liftCode}`.toLowerCase();
+        const haystack = `${defect.defectNo} ${defect.title} ${defect.location}`.toLowerCase();
         if (!haystack.includes(search.toLowerCase())) return false;
       }
       return true;
     });
-  }, [defects, search, statusFilter, severityFilter]);
+  }, [liftDefects, search, statusFilter, severityFilter]);
 
   const handleSave = async (values) => {
     try {
@@ -98,7 +85,7 @@ export default function Defects() {
   };
 
   const handleExport = () => {
-    exportToCSV('defects.csv', filteredDefects, DEFECT_CSV_COLUMNS);
+    exportToCSV(`defects-${lift.liftCode}.csv`, filteredDefects, DEFECT_CSV_COLUMNS);
   };
 
   const handleDelete = async () => {
@@ -115,17 +102,7 @@ export default function Defects() {
   const columns = [
     { field: 'defectNo', headerName: 'Defect No.', width: 110 },
     { field: 'title', headerName: 'Title', width: 220, flex: 1 },
-    {
-      field: 'location',
-      headerName: 'Location / Lift',
-      width: 180,
-      renderCell: (params) => (
-        <span>
-          {params.row.location}
-          {params.row.liftCode ? ` (${params.row.liftCode})` : ''}
-        </span>
-      ),
-    },
+    { field: 'location', headerName: 'Location', width: 180 },
     {
       field: 'severity',
       headerName: 'Severity',
@@ -173,13 +150,8 @@ export default function Defects() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
-        <Box>
-          <Typography variant="h4">Defect Management</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Log, track, and resolve lift defects across all properties.
-          </Typography>
-        </Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Defects — {lift.liftCode}</Typography>
         <Stack direction="row" spacing={1.5}>
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
@@ -199,27 +171,10 @@ export default function Defects() {
         </Stack>
       </Stack>
 
-      {stats && (
-        <Grid container spacing={2} mb={3}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard label="Total Defects" value={stats.total} icon={<ReportProblemOutlinedIcon />} color="primary.main" />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard label="Open" value={stats.open} icon={<HourglassEmptyOutlinedIcon />} color="error.main" />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard label="In Progress" value={stats.inProgress} icon={<BuildOutlinedIcon />} color="warning.main" />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard label="Resolved" value={stats.resolved} icon={<CheckCircleOutlinedIcon />} color="success.main" />
-          </Grid>
-        </Grid>
-      )}
-
-      <Stack direction="row" spacing={2} mb={2}>
+      <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" useFlexGap>
         <TextField
           label="Search"
-          placeholder="Defect no, title, location, lift code…"
+          placeholder="Defect no, title, location…"
           size="small"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -259,7 +214,7 @@ export default function Defects() {
 
       <Box
         sx={{
-          height: 560,
+          height: 480,
           bgcolor: 'background.paper',
           borderRadius: 2,
           border: 1,
@@ -282,6 +237,7 @@ export default function Defects() {
       <DefectFormDialog
         open={formOpen}
         defect={editingDefect}
+        initialLiftId={lift._id}
         onClose={() => {
           setFormOpen(false);
           setEditingDefect(null);
@@ -306,7 +262,7 @@ function DefectsEmptyState() {
   return (
     <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ height: '100%', color: 'text.secondary' }}>
       <ReportProblemOutlinedIcon sx={{ fontSize: 32 }} />
-      <Typography variant="body2">No defects match the current filters.</Typography>
+      <Typography variant="body2">No defects logged for this lift yet.</Typography>
     </Stack>
   );
 }

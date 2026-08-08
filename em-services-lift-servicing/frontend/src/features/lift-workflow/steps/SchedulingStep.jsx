@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSnackbar } from 'notistack';
-import { Box, Button, Grid, IconButton, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Button, IconButton, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/EditOutlined';
@@ -9,52 +9,22 @@ import DownloadIcon from '@mui/icons-material/DownloadOutlined';
 import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForwardOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined';
-import EventUpcomingIcon from '@mui/icons-material/EventAvailableOutlined';
-import CheckCircleIcon from '@mui/icons-material/CheckCircleOutline';
-import StatCard from '../../components/StatCard';
-import StatusChip from '../../components/StatusChip';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import ScheduleFormDialog from './ScheduleFormDialog';
-import ScheduleDetailsModal from './ScheduleDetailsModal';
-import * as scheduleApi from '../../api/scheduleApi';
-import { SCHEDULE_STATUSES, NEXT_STATUS, isOverdue } from '../../utils/scheduleHelpers';
-import { formatDate } from '../../utils/formatDate';
-import { exportToCSV } from '../../utils/csvExport';
-import { SCHEDULE_CSV_COLUMNS } from './scheduleCsvColumns';
-import { SCHEDULE_STATUS_COLORS } from '../../theme/statusColors';
-import { useAuth } from '../../context/AuthContext';
+import StatusChip from '../../../components/StatusChip';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import ScheduleFormDialog from '../../scheduling/ScheduleFormDialog';
+import ScheduleDetailsModal from '../../scheduling/ScheduleDetailsModal';
+import * as scheduleApi from '../../../api/scheduleApi';
+import { SCHEDULE_STATUSES, NEXT_STATUS, isOverdue } from '../../../utils/scheduleHelpers';
+import { formatDate } from '../../../utils/formatDate';
+import { exportToCSV } from '../../../utils/csvExport';
+import { SCHEDULE_CSV_COLUMNS } from '../../scheduling/scheduleCsvColumns';
+import { SCHEDULE_STATUS_COLORS } from '../../../theme/statusColors';
+import { useAuth } from '../../../context/AuthContext';
 
-const UPCOMING_WINDOW_DAYS = 7;
-const RECENTLY_COMPLETED_LIMIT = 5;
-
-// Simple stat tiles rather than a full charting library — client feedback
-// asked for "statistic/report" visibility, not a dedicated analytics page,
-// so this stays lightweight and lives right where staff already work.
-// Computed from the full (unfiltered) list, same as Lifts' stats endpoint
-// is decoupled from its grid filters.
-function computeStats(schedules) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const windowEnd = new Date(today);
-  windowEnd.setDate(windowEnd.getDate() + UPCOMING_WINDOW_DAYS);
-
-  const upcoming = schedules.filter((schedule) => {
-    if (schedule.status === 'Completed' || schedule.status === 'Cancelled') return false;
-    const date = new Date(schedule.scheduledDate);
-    return date >= today && date <= windowEnd;
-  });
-
-  const overdue = schedules.filter(isOverdue);
-
-  const recentlyCompleted = schedules
-    .filter((schedule) => schedule.status === 'Completed')
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    .slice(0, RECENTLY_COMPLETED_LIMIT);
-
-  return { upcomingCount: upcoming.length, overdueCount: overdue.length, recentlyCompletedCount: recentlyCompleted.length };
-}
-
-export default function SchedulingPage() {
+// Step 1 of the Lift Workflow - same CRUD/API as the standalone Scheduling page (Student
+// owner's scheduleApi + ScheduleFormDialog are reused untouched), just scoped down to
+// schedules linked to the currently selected lift.
+export default function SchedulingStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const canEdit = user.role === 'Admin' || user.role === 'Manager';
@@ -87,8 +57,10 @@ export default function SchedulingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const liftSchedules = useMemo(() => schedules.filter((s) => s.liftId === lift._id), [schedules, lift._id]);
+
   const filteredSchedules = useMemo(() => {
-    return schedules.filter((schedule) => {
+    return liftSchedules.filter((schedule) => {
       if (statusFilter && schedule.status !== statusFilter) return false;
       if (dateFilter && schedule.scheduledDate.slice(0, 10) !== dateFilter) return false;
       if (search) {
@@ -97,9 +69,7 @@ export default function SchedulingPage() {
       }
       return true;
     });
-  }, [schedules, search, statusFilter, dateFilter]);
-
-  const stats = useMemo(() => computeStats(schedules), [schedules]);
+  }, [liftSchedules, search, statusFilter, dateFilter]);
 
   const handleSave = async (values) => {
     try {
@@ -142,7 +112,7 @@ export default function SchedulingPage() {
   };
 
   const handleExport = () => {
-    exportToCSV('schedules.csv', filteredSchedules, SCHEDULE_CSV_COLUMNS);
+    exportToCSV(`schedules-${lift.liftCode}.csv`, filteredSchedules, SCHEDULE_CSV_COLUMNS);
   };
 
   const columns = [
@@ -163,7 +133,6 @@ export default function SchedulingPage() {
     },
     { field: 'townCouncil', headerName: 'Town Council', width: 180 },
     { field: 'liftCompany', headerName: 'Lift Company', width: 160 },
-    { field: 'blockAddress', headerName: 'Block/Lift Address', width: 200 },
     { field: 'assignedInspector', headerName: 'Inspector', width: 140 },
     {
       field: 'status',
@@ -212,8 +181,8 @@ export default function SchedulingPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Servicing Schedule</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Scheduling — {lift.liftCode}</Typography>
         <Stack direction="row" spacing={1.5}>
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
@@ -233,32 +202,10 @@ export default function SchedulingPage() {
         </Stack>
       </Stack>
 
-      <Grid container spacing={2} mb={3}>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard
-            label={`Upcoming (next ${UPCOMING_WINDOW_DAYS} days)`}
-            value={stats.upcomingCount}
-            icon={<EventUpcomingIcon />}
-            color="primary.main"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard label="Overdue" value={stats.overdueCount} icon={<WarningAmberIcon />} color="warning.main" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard
-            label="Recently Completed"
-            value={stats.recentlyCompletedCount}
-            icon={<CheckCircleIcon />}
-            color="success.main"
-          />
-        </Grid>
-      </Grid>
-
       <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" useFlexGap>
         <TextField
           label="Search"
-          placeholder="Town council, lift company, block, inspector…"
+          placeholder="Town council, lift company, inspector…"
           size="small"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -290,7 +237,7 @@ export default function SchedulingPage() {
         />
       </Stack>
 
-      <Box sx={{ height: 560, bgcolor: 'background.paper', borderRadius: 2 }}>
+      <Box sx={{ height: 480, bgcolor: 'background.paper', borderRadius: 2 }}>
         <DataGrid
           rows={filteredSchedules}
           columns={columns}
@@ -305,6 +252,7 @@ export default function SchedulingPage() {
       <ScheduleFormDialog
         open={formOpen}
         schedule={editingSchedule}
+        initialLiftId={lift._id}
         onClose={() => {
           setFormOpen(false);
           setEditingSchedule(null);

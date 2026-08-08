@@ -36,14 +36,16 @@ const schema = Yup.object({
   overallStatus: Yup.string().oneOf(STATUS_OPTIONS).required(),
 });
 
-export default function InspectionFormDialog({ open, inspection, onClose, onSubmit }) {
+export default function InspectionFormDialog({ open, inspection, onClose, onSubmit, initialLiftId }) {
   const [checklist, setChecklist] = useState(buildDefaultChecklist(DEFAULT_CHECKLIST_ITEMS));
   const [defects, setDefects] = useState([]);
 
+  // initialLiftId presets (and, below, locks) the lift picker for a fresh report opened
+  // from the Lift Workflow page's Inspections step — ignored once `inspection` is set.
   const formik = useFormik({
     enableReinitialize: true,
     initialValues: {
-      liftId: inspection?.liftId || '',
+      liftId: inspection?.liftId || initialLiftId || '',
       scheduleId: inspection?.scheduleId || null,
       inspectionDate: inspection?.inspectionDate ? dateInputValue(inspection.inspectionDate) : todayStr(),
       inspectorName: inspection?.inspectorName || '',
@@ -100,6 +102,7 @@ export default function InspectionFormDialog({ open, inspection, onClose, onSubm
                 onChange={handleLiftChange}
                 error={formik.touched.liftId && Boolean(formik.errors.liftId)}
                 helperText={formik.touched.liftId && formik.errors.liftId}
+                disabled={Boolean(initialLiftId) && !inspection}
               />
             </Grid>
             <Grid item xs={12}>

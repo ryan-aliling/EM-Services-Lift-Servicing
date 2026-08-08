@@ -1,0 +1,6 @@
+{"phase":"coding",
+"prompt":
+"Currently. the application has 6 different pages. What i want to do is to combine Scheduling, inspections, defects, and rectifications into one page.
+
+What i want is something like the first page where you can search by multiple different filters. Then when you select one, it brings you to scheduling, but only lists the info for that page, or you can create schedule for that one lift, then a next button to go to inspections, then defects, then rectifications. There should also be a back. There should be at the top something like (1) Scheduling ---- (2) Inspections and so on, which should be clickable if you dont want to move one step at a time. Keep the CRUDS separate, no merging, also each data should build on the previous. Like inspections should have lift info and scheduling for example",
+"action":"accepted"}
