@@ -115,7 +115,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
           {/* Section: where it is and how serious it is */}
           <SectionLabel>Location &amp; Classification</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
-            <Grid size={6}>
+            <Grid size={12}>
               <TextField
                 name="location"
                 label="Location"
@@ -127,7 +127,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                 helperText={formik.touched.location && formik.errors.location}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid size={12}>
               <LiftSelect
                 value={formik.values.liftId}
                 onChange={(id) => formik.setFieldValue('liftId', id)}
@@ -144,6 +144,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                 onChange={formik.handleChange}
                 error={formik.touched.severity && Boolean(formik.errors.severity)}
                 helperText={formik.touched.severity && formik.errors.severity}
+                sx={{ '& .MuiSelect-select': { minWidth: 120 } }}
               >
                 {DEFECT_SEVERITIES.map((s) => (
                   <MenuItem key={s} value={s}>
@@ -161,6 +162,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                   fullWidth
                   value={formik.values.status}
                   onChange={formik.handleChange}
+                  sx={{ '& .MuiSelect-select': { minWidth: 120 } }}
                 >
                   <MenuItem value={defect.status}>{defect.status} (no change)</MenuItem>
                   {nextStatusOptions.map((s) => (
