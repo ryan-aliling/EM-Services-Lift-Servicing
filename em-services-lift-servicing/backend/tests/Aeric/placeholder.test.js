@@ -10,12 +10,24 @@ const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const schedulingRoutes = require('../../src/routes/scheduling/schedulingRoutes');
+const Lift = require('../../src/models/lifts/Lift');
 
 function buildTestApp() {
   const app = express();
   app.use(express.json());
   app.use('/api/scheduling', schedulingRoutes);
   return app;
+}
+
+async function createTestLift(overrides = {}) {
+  return Lift.create({
+    liftCode: 'L-TEST-1',
+    block: 'Blk 1',
+    unit: '#01-01',
+    type: 'Passenger',
+    capacity: 10,
+    ...overrides,
+  });
 }
 
 const validPayload = {
@@ -61,6 +73,16 @@ describe('POST /api/scheduling', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/required/i);
   });
+
+  test('persists liftId when a lift is linked via LiftSelect', async () => {
+    const lift = await createTestLift();
+    const res = await request(app)
+      .post('/api/scheduling')
+      .send({ ...validPayload, liftId: lift._id.toString() });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.liftId).toBe(lift._id.toString());
+  });
 });
 
 describe('GET /api/scheduling', () => {
@@ -89,6 +111,23 @@ describe('GET /api/scheduling', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].status).toBe('Assigned');
+  });
+
+  test('filters by liftId - only returns that lift\'s schedules, not other lifts\'', async () => {
+    const liftA = await createTestLift();
+    const liftB = await createTestLift({ liftCode: 'L-TEST-2' });
+    await request(app)
+      .post('/api/scheduling')
+      .send({ ...validPayload, liftId: liftA._id.toString() });
+    await request(app)
+      .post('/api/scheduling')
+      .send({ ...validPayload, blockAddress: 'Blk 202', liftId: liftB._id.toString() });
+
+    const res = await request(app).get('/api/scheduling').query({ liftId: liftA._id.toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].liftId).toBe(liftA._id.toString());
   });
 });
 

@@ -1,8 +1,10 @@
 const Defect = require('../../models/defects/Defect');
 const Lift = require('../../models/lifts/Lift');
+const Inspection = require('../../models/inspections/Inspection');
 const ApiError = require('../../utils/ApiError');
 const asyncHandler = require('../../utils/asyncHandler');
 const { ok } = require('../../utils/apiResponse');
+const { cascadeFromDefects } = require('../../utils/cascadeDelete');
 
 const REQUIRED_FIELDS = ['title', 'location', 'severity'];
 
@@ -44,9 +46,25 @@ async function resolveLiftSnapshot(liftId) {
   return { liftCode: lift.liftCode };
 }
 
+// inspectionId is optional (a defect can be logged independently of any report - e.g. a
+// tenant complaint), but if one is supplied it has to resolve to a real, non-deleted
+// Inspection, and that inspection's own liftId has to match the defect's liftId when both
+// are given - so "this defect came from that report" can't silently point at the wrong
+// lift. This is what makes the Defects step actually derive from the Inspections step
+// instead of the two only coincidentally sharing terminology.
+async function assertInspectionMatchesLift(inspectionId, liftId) {
+  if (!inspectionId) return;
+  const inspection = await Inspection.findOne({ _id: inspectionId, isDeleted: false }).catch(() => null);
+  if (!inspection) throw ApiError.badRequest('Selected inspection report not found');
+  if (liftId && String(inspection.liftId) !== String(liftId)) {
+    throw ApiError.badRequest('Selected inspection report is for a different lift');
+  }
+  return inspection;
+}
+
 const listDefects = asyncHandler(async (req, res) => {
-  const { status, severity, q } = req.query;
-  const filter = {};
+  const { status, severity, q, liftId } = req.query;
+  const filter = { isDeleted: false };
 
   // status/severity can each be a single value or a comma-separated list, matching the
   // multi-select filter convention used by GET /api/inspections.
@@ -58,6 +76,9 @@ const listDefects = asyncHandler(async (req, res) => {
     const severities = Array.isArray(severity) ? severity : String(severity).split(',').filter(Boolean);
     if (severities.length) filter.severity = { $in: severities };
   }
+  if (liftId) {
+    filter.liftId = liftId;
+  }
   if (q) {
     const regex = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ defectNo: regex }, { title: regex }, { location: regex }, { liftCode: regex }];
@@ -68,19 +89,20 @@ const listDefects = asyncHandler(async (req, res) => {
 });
 
 const defectStats = asyncHandler(async (req, res) => {
+  const base = { isDeleted: false };
   const [total, open, inProgress, resolved, closed, criticalOpen] = await Promise.all([
-    Defect.countDocuments(),
-    Defect.countDocuments({ status: 'Open' }),
-    Defect.countDocuments({ status: 'In Progress' }),
-    Defect.countDocuments({ status: 'Resolved' }),
-    Defect.countDocuments({ status: 'Closed' }),
-    Defect.countDocuments({ severity: 'Critical', status: { $ne: 'Closed' } }),
+    Defect.countDocuments(base),
+    Defect.countDocuments({ ...base, status: 'Open' }),
+    Defect.countDocuments({ ...base, status: 'In Progress' }),
+    Defect.countDocuments({ ...base, status: 'Resolved' }),
+    Defect.countDocuments({ ...base, status: 'Closed' }),
+    Defect.countDocuments({ ...base, severity: 'Critical', status: { $ne: 'Closed' } }),
   ]);
   ok(res, { total, open, inProgress, resolved, closed, criticalOpen });
 });
 
 const getDefect = asyncHandler(async (req, res) => {
-  const defect = await Defect.findById(req.params.id);
+  const defect = await Defect.findOne({ _id: req.params.id, isDeleted: false });
   if (!defect) throw ApiError.notFound('Defect not found');
   ok(res, defect);
 });
@@ -89,12 +111,18 @@ const createDefect = asyncHandler(async (req, res) => {
   assertRequiredFields(req.body);
 
   const defectNo = await nextDefectNo();
-  const { liftCode } = await resolveLiftSnapshot(req.body.liftId);
+  const inspection = await assertInspectionMatchesLift(req.body.inspectionId, req.body.liftId);
+  // When a defect is raised from a specific inspection report, default its lift to that
+  // report's lift instead of requiring the caller to pass it twice.
+  const liftId = req.body.liftId || inspection?.liftId || null;
+  const { liftCode } = await resolveLiftSnapshot(liftId);
 
   const defect = await Defect.create({
     ...req.body,
     defectNo,
+    liftId,
     liftCode,
+    inspectionId: req.body.inspectionId || null,
     status: 'Open',
     resolvedDate: null,
   });
@@ -107,7 +135,7 @@ const createDefect = asyncHandler(async (req, res) => {
 // wrong initial entry regardless of how far the defect has already progressed.
 // A `status` change specifically still has to go through the transition map above.
 const updateDefect = asyncHandler(async (req, res) => {
-  const existing = await Defect.findById(req.params.id);
+  const existing = await Defect.findOne({ _id: req.params.id, isDeleted: false });
   if (!existing) throw ApiError.notFound('Defect not found');
 
   const { status, liftId, title, location, severity, description, reportedBy } = req.body;
@@ -146,10 +174,17 @@ const updateDefect = asyncHandler(async (req, res) => {
   ok(res, existing, 'Defect updated');
 });
 
+// Soft delete (previously a hard delete) - so it can cascade without destroying the audit
+// trail. Cascades to any Rectification against this defect (see utils/cascadeDelete.js).
 const deleteDefect = asyncHandler(async (req, res) => {
-  const defect = await Defect.findByIdAndDelete(req.params.id);
+  const defect = await Defect.findOne({ _id: req.params.id, isDeleted: false });
   if (!defect) throw ApiError.notFound('Defect not found');
-  ok(res, null, 'Defect deleted');
+
+  defect.isDeleted = true;
+  await defect.save();
+  const cascaded = await cascadeFromDefects([defect._id]);
+
+  ok(res, { cascaded }, 'Defect deleted');
 });
 
 module.exports = {

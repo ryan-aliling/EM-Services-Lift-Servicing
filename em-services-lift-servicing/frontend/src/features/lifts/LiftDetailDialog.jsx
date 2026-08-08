@@ -48,10 +48,10 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
     // 404 blanking out the whole dialog via Promise.all's fail-fast behaviour.
     const safe = (promise) => promise.catch(() => []);
     Promise.all([
-      safe(fetchSchedules({ lift: lift._id })),
-      safe(fetchInspections({ lift: lift._id })),
-      safe(fetchDefects({ lift: lift._id })),
-      safe(fetchRectifications({ lift: lift._id })),
+      safe(fetchSchedules({ liftId: lift._id })),
+      safe(fetchInspections({ liftId: lift._id })),
+      safe(fetchDefects({ liftId: lift._id })),
+      safe(fetchRectifications({ liftId: lift._id })),
     ])
       .then(([schedules, inspections, defects, rectifications]) =>
         setData({ schedules, inspections, defects, rectifications })

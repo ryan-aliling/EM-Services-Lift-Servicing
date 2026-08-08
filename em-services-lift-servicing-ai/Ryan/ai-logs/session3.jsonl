@@ -3,4 +3,21 @@
 "Currently. the application has 6 different pages. What i want to do is to combine Scheduling, inspections, defects, and rectifications into one page.
 
 What i want is something like the first page where you can search by multiple different filters. Then when you select one, it brings you to scheduling, but only lists the info for that page, or you can create schedule for that one lift, then a next button to go to inspections, then defects, then rectifications. There should also be a back. There should be at the top something like (1) Scheduling ---- (2) Inspections and so on, which should be clickable if you dont want to move one step at a time. Keep the CRUDS separate, no merging, also each data should build on the previous. Like inspections should have lift info and scheduling for example",
+"output": "Done. The four tabs are now merged into one Lift Workflow page, and npm run build in the frontend passes clean. Summary of what changed:
+
+Navigation (App.jsx, Workspace.jsx): 6 tabs → 3 (Dashboard, Lifts, Lift Workflow).
+
+New feature folder frontend/src/features/lift-workflow/:
+
+LiftSearchScreen.jsx — the 'first page': search/filter lifts by code, block, unit, status, type. Read-only (no lift CRUD here — that stays on the Lifts tab).
+WorkflowStepper.jsx — the clickable '(1) Scheduling — (2) Inspections — (3) Defects — (4) Rectifications' header; jump to any step directly.
+LiftWorkflowPage.jsx — orchestrator: shows the selected lift, the stepper, the active step, and Back/Next buttons.
+steps/SchedulingStep.jsx, InspectionsStep.jsx, DefectsStep.jsx, RectificationsStep.jsx — each reuses the original page's own API module and form dialog untouched, just scoped to the selected lift (liftId match, or for rectifications, walking defect.liftId since rectifications link to a defect, not a lift directly).
+Small additive changes so a new record is born already linked to the right lift: ScheduleFormDialog, InspectionFormDialog, DefectFormDialog gained an optional initialLiftId prop (locks the lift picker on create); RectificationForm/DefectSelect gained initialDefectId/liftId equivalents. All backward-compatible — no other call sites existed to break.
+
+Backend: untouched. Confirmed via git status — zero changes to any controller/route/model. Scheduling, Inspections, Defects, and Rectifications keep their fully separate CRUD as you wanted; this was purely a frontend navigation/UX merge.
+
+Deleted (superseded, no longer referenced anywhere): SchedulingPage.jsx, Inspections.jsx, Defects.jsx, RectificationsSection.jsx. All their sub-components (dialogs, useRectifications hook, DefectSelect, ScheduleSelect, CSV columns, etc.) were kept and reused.
+
+One thing worth trying in the running app: open Lift Workflow, pick a lift, create a schedule → advance to Inspections and confirm the lift is pre-locked → create defects → jump to Rectifications and use the 'Rectify' action on a specific defect row to confirm it locks that defect.",
 "action":"accepted"}

@@ -50,6 +50,10 @@ const inspectionSchema = new mongoose.Schema(
     overallStatus: { type: String, enum: OVERALL_STATUSES, default: 'Draft' },
     contractorNotifiedAt: { type: Date, default: null },
     notes: { type: String, default: '', trim: true },
+
+    // Soft delete, so deleting the Schedule this report followed up on can cascade here
+    // without destroying the audit trail (see utils/cascadeDelete.js).
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

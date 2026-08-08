@@ -1,16 +1,21 @@
 const Schedule = require('../../models/scheduling/Schedule');
 const { ok } = require('../../utils/apiResponse');
+const { cascadeFromSchedule } = require('../../utils/cascadeDelete');
 
 // GET /api/scheduling
-// Supports optional ?status=Scheduled and ?date=2026-08-06 filters so the
-// frontend can drive "what's due" views without extra endpoints.
+// Supports optional ?status=Scheduled, ?date=2026-08-06 and ?liftId=<id> filters so the
+// frontend can drive "what's due" views and lift-scoped views without extra endpoints.
 async function listSchedules(req, res) {
   try {
-    const { status, date } = req.query;
+    const { status, date, liftId } = req.query;
     const filter = { isDeleted: false };
 
     if (status) {
       filter.status = status;
+    }
+
+    if (liftId) {
+      filter.liftId = liftId;
     }
 
     if (date) {
@@ -45,7 +50,7 @@ async function getSchedule(req, res) {
 // POST /api/scheduling
 async function createSchedule(req, res) {
   try {
-    const { townCouncil, liftCompany, blockAddress, scheduledDate, assignedInspector, notes } = req.body;
+    const { townCouncil, liftCompany, blockAddress, scheduledDate, assignedInspector, notes, liftId } = req.body;
 
     if (!townCouncil || !liftCompany || !blockAddress || !scheduledDate) {
       return res.status(400).json({
@@ -60,6 +65,7 @@ async function createSchedule(req, res) {
       scheduledDate,
       assignedInspector,
       notes,
+      liftId: liftId || null,
     });
 
     ok(res, schedule, 'Schedule created', 201);
@@ -98,6 +104,10 @@ async function updateSchedule(req, res) {
 }
 
 // DELETE /api/scheduling/:id  (soft delete — keeps audit trail per data-integrity feedback)
+// Cascades: soft-deleting a schedule also soft-deletes every inspection that followed up
+// on it, and in turn every defect/rectification those inspections led to - a schedule is
+// the root of the workflow chain, so removing it should remove what it produced instead
+// of leaving orphaned downstream records behind (see utils/cascadeDelete.js).
 async function deleteSchedule(req, res) {
   try {
     const schedule = await Schedule.findOneAndUpdate(
@@ -110,7 +120,8 @@ async function deleteSchedule(req, res) {
       return res.status(404).json({ error: 'Schedule not found' });
     }
 
-    ok(res, { id: schedule._id }, 'Schedule deleted');
+    const cascaded = await cascadeFromSchedule(schedule._id);
+    ok(res, { id: schedule._id, cascaded }, 'Schedule deleted');
   } catch (err) {
     console.error('deleteSchedule error:', err);
     res.status(400).json({ error: 'Failed to delete schedule' });

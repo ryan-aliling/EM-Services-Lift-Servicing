@@ -11,6 +11,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const rectificationsRoutes = require('../../src/routes/rectifications/rectificationsRoutes');
 const Defect = require('../../src/models/defects/Defect');
 const Rectification = require('../../src/models/rectifications/Rectification');
+const Lift = require('../../src/models/lifts/Lift');
 
 function buildApp() {
   const app = express();
@@ -42,6 +43,7 @@ afterAll(async () => {
 afterEach(async () => {
   await Rectification.deleteMany({});
   await Defect.deleteMany({});
+  await Lift.deleteMany({});
 });
 
 // Every test needs a real Defect to point defectId at.
@@ -51,6 +53,17 @@ async function createDefect(overrides = {}) {
     title: 'Door not closing fully',
     location: 'Blk 12 lift lobby',
     severity: 'Major',
+    ...overrides,
+  });
+}
+
+async function createLift(overrides = {}) {
+  return Lift.create({
+    liftCode: 'L-TEST-1',
+    block: 'Blk 1',
+    unit: '#01-01',
+    type: 'Passenger',
+    capacity: 10,
     ...overrides,
   });
 }
@@ -162,6 +175,36 @@ describe('GET /api/rectifications', () => {
       title: 'Door not closing fully',
       description: 'Door bounces back before closing',
     });
+  });
+
+  // Rectification has no liftId of its own - filtering by lift means joining through the
+  // referenced Defect's liftId (see listRectifications in rectificationController.js).
+  test('filters by liftId via the linked defect - only returns that lift\'s rectifications', async () => {
+    const liftA = await createLift();
+    const liftB = await createLift({ liftCode: 'L-TEST-2' });
+    const defectA = await createDefect({ liftId: liftA._id });
+    const defectB = await createDefect({ defectNo: 'DEF-0002', liftId: liftB._id });
+
+    const kept = await request(app).post('/api/rectifications').send(baseBody(defectA));
+    await request(app).post('/api/rectifications').send(baseBody(defectB));
+
+    const res = await request(app).get('/api/rectifications').query({ liftId: liftA._id.toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0]._id).toBe(kept.body.data._id);
+  });
+
+  test('liftId filter with no matching lift returns an empty list', async () => {
+    const defect = await createDefect();
+    await request(app).post('/api/rectifications').send(baseBody(defect));
+
+    const res = await request(app)
+      .get('/api/rectifications')
+      .query({ liftId: new mongoose.Types.ObjectId().toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(0);
   });
 });
 
@@ -294,6 +337,56 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
     expect(res.body.data.status).toBe('Endorsed');
     expect(res.body.data.endorsedBy).toBe('EM Staff');
     expect(res.body.data.endorsedDate).toBeTruthy();
+  });
+
+  // Endorsement means EM staff confirmed, after a joint on-site inspection, that the
+  // defect is actually fixed - so it should also advance the linked Defect, using the same
+  // transition rules as defectController.js's updateDefect (see VALID_TRANSITIONS).
+  test('advances a linked "In Progress" defect to "Resolved" and sets resolvedDate', async () => {
+    const defect = await createDefect({ status: 'In Progress' });
+    const created = await request(app)
+      .post('/api/rectifications')
+      .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
+
+    const res = await request(app)
+      .patch(`/api/rectifications/${created.body.data._id}/endorse`)
+      .send({ endorsedBy: 'EM Staff' });
+    expect(res.status).toBe(200);
+
+    const updatedDefect = await Defect.findById(defect._id);
+    expect(updatedDefect.status).toBe('Resolved');
+    expect(updatedDefect.resolvedDate).toBeTruthy();
+  });
+
+  test('advances a linked "Open" defect straight to "Closed" (not through Resolved)', async () => {
+    const defect = await createDefect({ status: 'Open' });
+    const created = await request(app)
+      .post('/api/rectifications')
+      .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
+
+    const res = await request(app)
+      .patch(`/api/rectifications/${created.body.data._id}/endorse`)
+      .send({ endorsedBy: 'EM Staff' });
+    expect(res.status).toBe(200);
+
+    const updatedDefect = await Defect.findById(defect._id);
+    expect(updatedDefect.status).toBe('Closed');
+  });
+
+  test('leaves an already-"Closed" defect alone and still succeeds (does not throw)', async () => {
+    const defect = await createDefect({ status: 'Closed' });
+    const created = await request(app)
+      .post('/api/rectifications')
+      .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
+
+    const res = await request(app)
+      .patch(`/api/rectifications/${created.body.data._id}/endorse`)
+      .send({ endorsedBy: 'EM Staff' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('Endorsed');
+
+    const updatedDefect = await Defect.findById(defect._id);
+    expect(updatedDefect.status).toBe('Closed');
   });
 
   test('cannot endorse twice', async () => {

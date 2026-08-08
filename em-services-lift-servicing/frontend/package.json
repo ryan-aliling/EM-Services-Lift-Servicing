@@ -11,7 +11,8 @@
     "test:aeric": "vitest run tests/Aeric",
     "test:javier": "vitest run tests/Javier",
     "test:elijah": "vitest run tests/Elijah",
-    "test:ryan": "vitest run tests/Ryan"
+    "test:ryan": "vitest run tests/Ryan",
+    "test:workflow": "vitest run tests/LiftWorkflow"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
