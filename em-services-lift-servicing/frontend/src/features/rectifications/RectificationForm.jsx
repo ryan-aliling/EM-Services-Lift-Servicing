@@ -147,7 +147,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
         <DialogContent dividers>
           <SectionLabel>What Was Fixed</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <DefectSelect
                 value={formik.values.defectId}
                 onChange={(id) => formik.setFieldValue('defectId', id)}
@@ -163,7 +163,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
 
           <SectionLabel>Rectification Details</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="rectifiedBy"
                 label="Rectified By"
@@ -175,7 +175,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
                 helperText={formik.touched.rectifiedBy && formik.errors.rectifiedBy}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="liftCompanyName"
                 label="Lift Company"
@@ -185,7 +185,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
                 onChange={formik.handleChange}
               />
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 type="date"
                 name="dateRectified"
@@ -198,7 +198,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
                 helperText={formik.touched.dateRectified && formik.errors.dateRectified}
               />
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="remarks"
                 label="Remarks"

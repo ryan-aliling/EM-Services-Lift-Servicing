@@ -86,7 +86,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
           {/* Section: what the defect is */}
           <SectionLabel>Defect Details</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="title"
                 label="Title"
@@ -98,7 +98,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
                 helperText={formik.touched.title && formik.errors.title}
               />
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="description"
                 label="Description"
@@ -117,7 +117,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
           {/* Section: where it is and how serious it is */}
           <SectionLabel>Location &amp; Classification</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="location"
                 label="Location"
@@ -129,7 +129,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
                 helperText={formik.touched.location && formik.errors.location}
               />
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <LiftSelect
                 value={formik.values.liftId}
                 onChange={(id) => formik.setFieldValue('liftId', id)}
@@ -137,7 +137,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
                 disabled={Boolean(initialLiftId) && !isEdit}
               />
             </Grid>
-            <Grid size={isEdit ? 6 : 12}>
+            <Grid item xs={isEdit ? 6 : 12}>
               <TextField
                 select
                 name="severity"
@@ -157,7 +157,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
               </TextField>
             </Grid>
             {isEdit && (
-              <Grid size={6}>
+              <Grid item xs={6}>
                 <TextField
                   select
                   name="status"
@@ -183,7 +183,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit, init
           {/* Section: who's logging it */}
           <SectionLabel>Reporting</SectionLabel>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="reportedBy"
                 label="Reported By"

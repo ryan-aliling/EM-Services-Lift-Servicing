@@ -20,6 +20,7 @@ const BASE_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'lifts', label: 'Lifts' },
   { id: 'lift-workflow', label: 'Lift Workflow' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 // Accounts tab only exists for Master/Admin - Staff never sees or can navigate to it (see

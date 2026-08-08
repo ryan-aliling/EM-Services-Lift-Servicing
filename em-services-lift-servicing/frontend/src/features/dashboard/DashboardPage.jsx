@@ -78,38 +78,38 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h4" mb={3}>
+      <Typography variant="h4" mb={4}>
         Dashboard
       </Typography>
 
-      <Grid container spacing={2} mb={3}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+      <Grid container spacing={2.5} mb={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Total Schedules" value={stats.total} icon={<EventNoteOutlinedIcon />} color="primary.main" />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Scheduled" value={stats.scheduled} icon={<EventAvailableOutlinedIcon />} color="info.main" />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Pending" value={stats.pending} icon={<HourglassBottomOutlinedIcon />} color="warning.main" />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Overdue" value={stats.overdue} icon={<WarningAmberOutlinedIcon />} color="error.main" />
         </Grid>
       </Grid>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-            <Typography variant="subtitle1" mb={1.5}>
+      <Grid container spacing={2.5}>
+        <Grid item xs={12} md={7}>
+          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
+            <Typography variant="subtitle1" mb={2}>
               Schedule Status Distribution
             </Typography>
             <Bar data={chartData} options={chartOptions} />
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-            <Typography variant="subtitle1" mb={1}>
+        <Grid item xs={12} md={5}>
+          <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
+            <Typography variant="subtitle1" mb={1.5}>
               Recent Activity
             </Typography>
             {!loading && recentActivity.length === 0 && (
