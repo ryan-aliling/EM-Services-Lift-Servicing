@@ -131,7 +131,7 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
               <LiftSelect
                 value={formik.values.liftId}
                 onChange={(id) => formik.setFieldValue('liftId', id)}
-                label="Lift (optional)"
+                label="Lift"
               />
             </Grid>
             <Grid size={isEdit ? 6 : 12}>
