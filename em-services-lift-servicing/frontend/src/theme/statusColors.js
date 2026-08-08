@@ -38,13 +38,13 @@ export const DEFECT_COMPLIANCE_COLORS = {
   'Defect Found': 'error',
 };
 
-// Defects/Rectifications modules aren't built yet, so these two are still placeholder
-// enums - safe to refine once each module lands (StatusChip falls back to a gray
-// "default" chip for any value not listed here).
+// Defects module has landed (backend/src/models/defects/Defect.js) - matches its real
+// status enum exactly.
 export const DEFECT_STATUS_COLORS = {
   Open: 'error',
   'In Progress': 'warning',
   Resolved: 'success',
+  Closed: 'default',
 };
 
 export const RECTIFICATION_STATUS_COLORS = {

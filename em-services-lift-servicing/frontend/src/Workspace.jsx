@@ -3,6 +3,7 @@ import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
 import Lifts from './features/lifts/Lifts';
 import SchedulingPage from './features/scheduling/SchedulingPage';
 import Inspections from './features/inspections/Inspections';
+import Defects from './features/defects/Defects';
 import DashboardPage from './features/dashboard/DashboardPage';
 
 // Each feature owner mounts their page component here under their tab id.
@@ -16,6 +17,7 @@ const FEATURE_PAGES = {
   lifts: Lifts,
   scheduling: SchedulingPage,
   inspections: Inspections,
+  defects: Defects,
 };
 
 export default function Workspace({ tabs, activeTab }) {
