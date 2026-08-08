@@ -224,6 +224,19 @@ describe('GET /api/defects', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].defectNo).toBe(created.body.data.defectNo);
   });
+
+  test('filters by liftId - only returns that lift\'s defects, not other lifts\'', async () => {
+    const liftA = await createTestLift();
+    const liftB = await createTestLift({ liftCode: 'L-TEST-2' });
+    await request(app).post('/api/defects').send(basePayload({ liftId: liftA._id.toString() }));
+    await request(app).post('/api/defects').send(basePayload({ liftId: liftB._id.toString() }));
+
+    const res = await request(app).get('/api/defects').query({ liftId: liftA._id.toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].liftId).toBe(liftA._id.toString());
+  });
 });
 
 describe('GET /api/defects/stats', () => {

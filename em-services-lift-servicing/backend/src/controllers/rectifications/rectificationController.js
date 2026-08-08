@@ -3,6 +3,20 @@ const Defect = require('../../models/defects/Defect');
 const ApiError = require('../../utils/ApiError');
 const asyncHandler = require('../../utils/asyncHandler');
 const { ok } = require('../../utils/apiResponse');
+// Reused rather than re-declared here - see defectController.js's updateDefect for the
+// canonical enforcement of this map.
+const { VALID_TRANSITIONS } = require('../defects/defectController');
+
+// Endorsing a rectification means EM staff have confirmed, after a joint on-site
+// inspection, that the defect is actually fixed - so it should also advance the linked
+// Defect forward, not just leave it wherever it happened to be. Only Open and In Progress
+// have anywhere meaningful to advance to; a defect that's already Resolved or Closed is
+// left alone (see endorseRectification below for what happens when the map doesn't allow
+// the jump, e.g. the defect was independently moved to Closed already).
+const ENDORSEMENT_TARGET_STATUS = {
+  Open: 'Closed',
+  'In Progress': 'Resolved',
+};
 
 // Always required, regardless of what status the record is being created as - a
 // rectification without these three doesn't identify what was fixed, who fixed it,
@@ -19,7 +33,7 @@ function assertRequiredFields(body) {
 // defectController.js's resolveLiftSnapshot for an optional liftId, except this link
 // is mandatory rather than optional.
 async function assertDefectExists(defectId) {
-  const defect = await Defect.findById(defectId).catch(() => null);
+  const defect = await Defect.findOne({ _id: defectId, isDeleted: false }).catch(() => null);
   if (!defect) throw ApiError.badRequest('Selected defect not found');
 }
 
@@ -42,8 +56,19 @@ function cleanPhotos(proofPhotos) {
 // table needs *something* readable to identify which defect each row is about.
 const DEFECT_SUMMARY_FIELDS = 'defectNo title description liftId liftCode';
 
+// Rectification has no direct liftId of its own - it only links to a lift via the Defect
+// it closes out - so scoping this list to a lift means resolving that lift's Defect ids
+// first and filtering on defectId rather than a field that doesn't exist on this model.
 const listRectifications = asyncHandler(async (req, res) => {
-  const rectifications = await Rectification.find({ isDeleted: false })
+  const { liftId } = req.query;
+  const filter = { isDeleted: false };
+
+  if (liftId) {
+    const defectIds = await Defect.find({ liftId, isDeleted: false }).distinct('_id');
+    filter.defectId = { $in: defectIds };
+  }
+
+  const rectifications = await Rectification.find(filter)
     .populate('defectId', DEFECT_SUMMARY_FIELDS)
     .sort({ createdAt: -1 });
   ok(res, rectifications);
@@ -160,6 +185,24 @@ const endorseRectification = asyncHandler(async (req, res) => {
   existing.endorsedBy = endorsedBy;
   existing.endorsedDate = new Date();
   await existing.save();
+
+  // Advance the linked Defect in the same request, using the exact same transition rules
+  // defectController.js's updateDefect enforces (VALID_TRANSITIONS, imported above). The
+  // rectification's own endorsement is the primary action here, so a defect-side edge case
+  // - already Closed, moved to some other state independently, or even missing - is
+  // silently skipped rather than thrown: it must never block the endorsement itself.
+  const defect = await Defect.findOne({ _id: existing.defectId, isDeleted: false }).catch(() => null);
+  if (defect) {
+    const targetStatus = ENDORSEMENT_TARGET_STATUS[defect.status];
+    if (targetStatus && (VALID_TRANSITIONS[defect.status] || []).includes(targetStatus)) {
+      defect.status = targetStatus;
+      if (targetStatus === 'Resolved' && !defect.resolvedDate) {
+        defect.resolvedDate = new Date();
+      }
+      await defect.save();
+    }
+  }
+
   ok(res, existing, 'Rectification endorsed');
 });
 

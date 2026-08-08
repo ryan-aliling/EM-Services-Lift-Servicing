@@ -1,0 +1,203 @@
+{"phase":"coding",
+"prompt":
+"Fix a data-isolation bug in the Lift Detail view: viewing any lift shows the
+same schedules/inspections/defects/rectifications as every other lift,
+because the backend ignores the lift filter the frontend already sends.
+
+Confirmed root causes:
+
+1. `backend/src/controllers/scheduling/schedulingController.js` — `listSchedules`
+   only reads `{ status, date }` from req.query and never applies a `liftId`
+   filter, so `Schedule.find(filter)` returns every schedule.
+
+2. `backend/src/controllers/inspections/inspectionController.js` —
+   `listInspections` only reads `{ status, q }`, same missing `liftId` filter.
+
+3. `backend/src/controllers/defects/defectController.js` — `listDefects`
+   only reads `{ status, severity, q }`, same missing `liftId` filter.
+
+4. `backend/src/controllers/rectifications/rectificationController.js` —
+   `listRectifications` reads no query params at all and always does
+   `Rectification.find({ isDeleted: false })`. Rectification has no direct
+   `liftId` field — it only links via `defectId` — so filtering by lift here
+   requires joining through the referenced Defect's `liftId`.
+
+5. Param name mismatch: the frontend (`LiftDetailDialog.jsx`) calls each
+   fetch with `{ lift: lift._id }`, but the Schedule/Defect/Inspection
+   models use the field name `liftId`. Standardize on `liftId` as the query
+   param name across frontend and backend so this doesn't silently
+   no-op again.
+
+6. `schedulingController.js` — `createSchedule` destructures req.body as
+   `{ townCouncil, liftCompany, blockAddress, scheduledDate, assignedInspector,
+   notes }` and never reads or stores `liftId`, even though
+   `ScheduleFormDialog.jsx` collects and submits it via `LiftSelect`. Fix
+   `createSchedule` to also destructure and persist `liftId`. Note:
+   `updateSchedule` already spreads req.body wholesale so it does persist
+   liftId on edits — only `createSchedule` needs the fix.
+
+Required changes:
+
+- Add `liftId` filtering to `listSchedules`, `listInspections`, and
+  `listDefects` (filter by `req.query.liftId` when present).
+- Add `liftId` filtering to `listRectifications` by resolving matching
+  Defect IDs for the given lift first (e.g. `Defect.find({ liftId }).distinct('_id')`)
+  and filtering Rectification by `defectId: { $in: ... }`.
+- Fix `createSchedule` to accept and store `liftId` from req.body.
+- Rename the frontend's fetch param from `lift` to `liftId` in
+  `LiftDetailDialog.jsx` (and anywhere else calling these four fetch
+  functions with the old `lift` key), so it matches the backend filter.
+- Flag as a known data gap (do NOT silently auto-fix without confirming):
+  any Schedule documents created before this fix will have `liftId: null`
+  and won't retroactively associate with a lift — note this in the PR/commit
+  description so the team can decide whether a backfill migration is needed.
+- Add/update tests covering: fetching schedules/inspections/defects/
+  rectifications scoped to a specific lift returns only that lift's records,
+  and that other lifts' records are excluded.
+
+Do not change unrelated behavior (existing status/date/severity/q filters
+must keep working alongside the new liftId filter)",
+"output": "Rewrote the filter bar in LiftSearchScreen.jsx:
+
+Status & Type → multi-select: converted from single-select TextField select to Select multiple with checkboxes + ListItemText, matching the exact pattern already used for the status filter in InspectionsStep.jsx (extracted into a small shared MultiSelectFilter component to avoid repeating it 4 times). Empty selection = "All statuses"/"All types" (no filtering), matching the old default.
+Manufacturer filter: multi-select, options computed via useMemo as the distinct non-empty manufacturer values in the loaded lifts array — not hardcoded.
+Block filter: same approach, distinct block values.
+Capacity range: min/max numeric TextFields (type='number', size='small', non-negative).
+Last serviced date range: from/to TextField type='date' pickers (matching the plain-HTML-date-input convention used elsewhere in this codebase — there's no @mui/x-date-pickers dependency here). A lift with no lastServiced is excluded once either bound is set, rather than silently matching.
+filteredLifts: updated to AND all filters together, with each multi-select OR'd internally (documented inline).
+Clear filters button: resets all nine filter states back to their EMPTY_FILTERS defaults in one click; disabled when no filter is active.
+Row-click-to-select and the 'Select' button/column are untouched; screen is still read-only.
+Filtering stays client-side, per the existing pattern — added a code comment flagging that this should move server-side (pagination/query-param filtering, which several other endpoints already support) if the lift directory grows large, rather than assuming it's fine forever.",
+"action":"accepted"}
+
+
+
+{"phase":"coding",
+"prompt":
+"Expand the search filters on the Lift Workflow search screen
+(frontend/src/features/lift-workflow/LiftSearchScreen.jsx) and make the
+categorical filters multi-select.
+
+Current state:
+- Only 3 filters exist: free-text `search` (matches liftCode/block/unit),
+  `statusFilter` (single-select dropdown), `typeFilter` (single-select
+  dropdown).
+- Filtering happens client-side in a `useMemo` over the full `lifts` array
+  already fetched via `liftApi.fetchLifts()`.
+- Lift fields available (see backend/src/models/lifts/Lift.js) but not yet
+  filterable: `manufacturer`, `capacity`, `installDate`, `lastServiced`.
+- `LIFT_TYPES` and `LIFT_STATUSES` enums come from
+  frontend/src/utils/liftHelpers.js.
+
+Required changes:
+
+1. Convert `statusFilter` and `typeFilter` from single-select `TextField
+   select` to multi-select controls (MUI `Select multiple` with checkboxes,
+   or `Autocomplete multiple` — match whatever multi-select pattern, if any,
+   is already used elsewhere in the app for consistency). Each should default
+   to 'all' (empty selection = no filtering on that field) and show selected
+   chips/summary text.
+
+2. Add a **manufacturer** filter — multi-select, options derived dynamically
+   from the distinct `manufacturer` values present in the loaded `lifts`
+   array (don't hardcode a list, since manufacturers aren't a fixed enum).
+
+3. Add a **block** filter — multi-select, options derived dynamically from
+   distinct `block` values in the loaded lifts (same reasoning as
+   manufacturer).
+
+4. Add a **capacity range** filter (min/max numeric inputs, or a slider) to
+   filter lifts by `capacity`.
+
+5. Add a **last serviced date range** filter (from/to date pickers) filtering
+   on `lastServiced`.
+
+6. Update the `filteredLifts` useMemo to apply all new filters using
+   'OR within a field, AND across fields' semantics — e.g. selecting
+   ['Active', 'Maintenance'] in status shows lifts matching either, but a
+   lift must also match the selected type(s)/manufacturer(s)/block(s)/
+   capacity range/date range simultaneously.
+
+7. Add a 'Clear filters' button that resets all filter state at once.
+
+8. Keep this screen read-only (no create/edit/delete) and keep the single-row
+   'Select' action / row-click-to-select behavior unchanged — this is a
+   filter/search enhancement only, not a change to the workflow's one-lift-
+   at-a-time selection model.
+
+9. Keep filtering client-side (consistent with the current implementation)
+   unless the lift list is expected to grow large enough that server-side
+   filtering/pagination becomes necessary — flag that tradeoff rather than
+   assuming it.
+
+Preserve existing styling conventions (MUI `size='small'`, `Stack` layout,
+`flexWrap`) and don't touch the DataGrid columns or the Lifts CRUD page —
+scope is limited to LiftSearchScreen.jsx's filter bar.",
+"output": "Fixed LiftWorkflowPage.jsx:
+
+Replaced the dead disabled={activeStep === 0} + decrement-only onClick with a handleBack function: on step 0 it calls setSelectedLift(null) (returning to LiftSearchScreen, same as 'Change Lift') and resets activeStep back to 0; on steps 1–3 it still just decrements activeStep as before.
+Removed the disabled prop entirely — 'Back' is now always actionable.
+Left 'Change Lift' untouched as a same-effect shortcut from any step.
+Icon/label/styling unchanged (ArrowBackIcon, 'Back', same Button with no variant).",
+"action":"accepted"}
+
+
+
+
+{"phase":"coding",
+"prompt":
+"The Lift Workflow (frontend/src/features/lift-workflow/) currently shows no
+sense of 'where is this lift at' or 'does anything here need attention' -
+you have to click through Scheduling -> Inspections -> Defects ->
+Rectifications and piece it together yourself.
+
+Add a small, high-signal status summary for the selected lift, surfaced on
+LiftWorkflowPage.jsx (and/or as a compact column on LiftSearchScreen.jsx's
+lift list) - NOT a dashboard. The goal is 'glance at this and know if
+something needs attention,' not a stats panel.
+
+Use judgment to pick 2-4 indicators that are genuinely actionable, from data
+already in the four workflow models (Schedule, Inspection, Defect,
+Rectification - see backend/src/models/*/*.js for exact fields/statuses,
+and backend/src/utils/cascadeDelete.js for how they link via
+liftId/scheduleId/inspectionId/defectId). Two examples of the kind of thing
+worth surfacing (not a required list, just illustrating the bar):
+  - Where this lift currently sits in the Schedule -> Inspection -> Defect
+    -> Rectification chain (its latest step).
+  - Something overdue or stuck (a spot-check past its scheduled date that
+    never completed, a defect sitting unresolved well past when it was
+    reported, a rectification submitted but never endorsed, etc.).
+
+Explicitly out of scope: don't add a metrics/analytics panel, don't repeat
+information already visible elsewhere on the page (e.g. the lift's own
+status chip already shown in the header), and don't add an indicator 'just
+because the data exist' - each one should answer a real question someone
+would actually ask before deciding what to do next with this lift. If in
+doubt about whether an indicator earns its place, leave it out.
+
+Keep it visually restrained - a short status line, a chip, or a small badge
+near the existing liftCode/block header on LiftWorkflowPage.jsx (see its
+current header Stack around line 41-50), not a new panel or dashboard
+section. Match existing UI conventions (StatusChip component, MUI Tooltip
+for explaining *why* something is flagged, the isServiceDue-style warning
+icon pattern already used elsewhere in the app).",
+"output": "Added a compact, two-part status summary to the Lift Workflow header (LiftWorkflowPage.jsx), next to the existing liftCode/block/unit/status chip:
+
+1. Stage chip (outlined, so it reads as secondary to the lift's own status chip) — answers 'where is this lift in the Schedule → Inspection → Defect → Rectification chain right now,' picked furthest-along-first so it always reflects the most operationally relevant thing:
+open defect(s) → awaiting rectification endorsement / rectification in draft → inspection in progress → spot-check pending → not yet scheduled → up to date.
+
+2. Warning icon + tooltip (only rendered when something's actually stuck) — answers 'is anything overdue,' listing every applicable reason:
+
+a spot-check past its scheduled date that's still open (reused the existing isOverdue helper from scheduleHelpers.js)
+a defect open past a severity-scaled grace period (Critical 3d / Major 7d / Minor 14d — a defect isn't automatically 'stuck' the instant it's logged)
+a rectification Submitted 7+ days ago with no endorsement yet
+New file useLiftWorkflowStatus.js fetches this one lift's slice of all four modules via the ?liftId= server-side filters (added in an earlier fix) and reduces them to those two indicators; it re-fetches whenever activeStep changes so stepping through the wizard picks up anything just created in the previous step.
+
+Scoped out on purpose, per the brief: no metrics panel, no repeat of the lift's own status chip, no indicator added 'because the data exists' (e.g. didn't add a raw open-defect-count badge separate from the stage chip, since the stage chip already leads with that when it's the most relevant fact). Also skipped the 'compact column on LiftSearchScreen' option — computing this per-row would mean fetching 4 collections per lift in the list (N+1), which conflicts with 'keep it high-signal, not a dashboard' and the list's existing pure-client-side-filter design; flagging that as a deliberate scope decision rather than an oversight.
+
+Verification: added frontend/tests/LiftWorkflow/useLiftWorkflowStatus.test.js (19 tests, all passing via new npm run test:workflow) covering the stage-priority logic and each attention-reason threshold; npm run build is clean.",
+"action":"accepted"}
+
+
+
+

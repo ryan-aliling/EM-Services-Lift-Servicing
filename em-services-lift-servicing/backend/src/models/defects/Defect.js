@@ -30,6 +30,12 @@ const defectSchema = new mongoose.Schema(
     liftCode: { type: String, default: '', trim: true },
     location: { type: String, required: true, trim: true },
 
+    // Optional link back to the Inspection report that raised this defect (Schedule ->
+    // Inspection -> Defect, per the client's workflow doc). Left null for defects logged
+    // independently of a report (e.g. a tenant complaint or ad-hoc walkthrough finding) -
+    // per the design doc, standalone defects aren't required to trace back to an inspection.
+    inspectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inspection', default: null },
+
     severity: { type: String, enum: DEFECT_SEVERITIES, required: true },
     status: { type: String, enum: DEFECT_STATUSES, default: 'Open' },
 
@@ -39,6 +45,10 @@ const defectSchema = new mongoose.Schema(
     // Set by the controller the moment status first reaches Resolved - kept even if
     // later reopened, so "how long did this take to fix" stays answerable.
     resolvedDate: { type: Date, default: null },
+
+    // Soft delete, so deleting the Inspection this defect was raised on can cascade here
+    // without destroying the audit trail (see utils/cascadeDelete.js).
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -36,12 +36,17 @@ export default function RectificationsStep({ lift }) {
   const [viewingRectification, setViewingRectification] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    defectApi
+  const loadDefects = () => {
+    setDefectsLoading(true);
+    return defectApi
       .fetchDefects()
       .then((list) => setLiftDefects(list.filter((d) => d.liftId === lift._id)))
       .catch(() => enqueueSnackbar('Failed to load defects for this lift', { variant: 'error' }))
       .finally(() => setDefectsLoading(false));
+  };
+
+  useEffect(() => {
+    loadDefects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lift._id]);
 
@@ -82,6 +87,10 @@ export default function RectificationsStep({ lift }) {
   const handleEndorse = async (id, endorsedBy) => {
     await endorse(id, endorsedBy);
     setViewingRectification(null);
+    // Endorsing advances the linked Defect's status server-side (see
+    // endorseRectification in rectificationController.js) - refetch so the "Open Defects
+    // for this Lift" panel above reflects that instead of showing its stale pre-endorse status.
+    loadDefects();
   };
 
   const handleDelete = async () => {
