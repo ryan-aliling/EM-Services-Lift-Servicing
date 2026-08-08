@@ -14,6 +14,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import DownloadIcon from '@mui/icons-material/DownloadOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
@@ -25,6 +26,8 @@ import DefectFormDialog from './DefectFormDialog';
 import * as defectApi from '../../api/defectApi';
 import { DEFECT_SEVERITIES, DEFECT_STATUSES } from '../../utils/defectHelpers';
 import { formatDate } from '../../utils/formatDate';
+import { exportToCSV } from '../../utils/csvExport';
+import { DEFECT_CSV_COLUMNS } from './defectCsvColumns';
 import { DEFECT_STATUS_COLORS, DEFECT_SEVERITY_COLORS } from '../../theme/statusColors';
 import { useAuth } from '../../context/AuthContext';
 
@@ -92,6 +95,10 @@ export default function Defects() {
     } catch (err) {
       enqueueSnackbar(err.response?.data?.message || 'Failed to save defect', { variant: 'error' });
     }
+  };
+
+  const handleExport = () => {
+    exportToCSV('defects.csv', filteredDefects, DEFECT_CSV_COLUMNS);
   };
 
   const handleDelete = async () => {
@@ -173,18 +180,23 @@ export default function Defects() {
             Log, track, and resolve lift defects across all properties.
           </Typography>
         </Box>
-        {canEdit && (
-          <Button
-            startIcon={<AddIcon />}
-            variant="contained"
-            onClick={() => {
-              setEditingDefect(null);
-              setFormOpen(true);
-            }}
-          >
-            Log Defect
+        <Stack direction="row" spacing={1.5}>
+          <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
+            Export CSV
           </Button>
-        )}
+          {canEdit && (
+            <Button
+              startIcon={<AddIcon />}
+              variant="contained"
+              onClick={() => {
+                setEditingDefect(null);
+                setFormOpen(true);
+              }}
+            >
+              Log Defect
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       {stats && (

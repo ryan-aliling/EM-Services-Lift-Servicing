@@ -6,12 +6,27 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   Grid,
   MenuItem,
   TextField,
+  Typography,
 } from '@mui/material';
 import LiftSelect from '../lifts/LiftSelect';
 import { DEFECT_SEVERITIES, DEFECT_NEXT_STATUSES } from '../../utils/defectHelpers';
+
+// Small uppercase label used to break the form into scannable sections
+// instead of one long undifferentiated list of fields.
+function SectionLabel({ children }) {
+  return (
+    <Typography
+      variant="caption"
+      sx={{ fontWeight: 600, letterSpacing: 0.4, color: 'text.secondary', textTransform: 'uppercase' }}
+    >
+      {children}
+    </Typography>
+  );
+}
 
 const emptyDefect = {
   title: '',
@@ -66,7 +81,9 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
       <form onSubmit={formik.handleSubmit}>
         <DialogTitle>{isEdit ? `Edit Defect ${defect.defectNo}` : 'Log Defect'}</DialogTitle>
         <DialogContent dividers>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          {/* Section: what the defect is */}
+          <SectionLabel>Defect Details</SectionLabel>
+          <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
             <Grid size={12}>
               <TextField
                 name="title"
@@ -79,6 +96,25 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                 helperText={formik.touched.title && formik.errors.title}
               />
             </Grid>
+            <Grid size={12}>
+              <TextField
+                name="description"
+                label="Description"
+                placeholder="Describe the defect..."
+                fullWidth
+                multiline
+                rows={3}
+                value={formik.values.description}
+                onChange={formik.handleChange}
+              />
+            </Grid>
+          </Grid>
+
+          <Divider />
+
+          {/* Section: where it is and how serious it is */}
+          <SectionLabel>Location &amp; Classification</SectionLabel>
+          <Grid container spacing={2} sx={{ mt: 1, mb: 2.5 }}>
             <Grid size={6}>
               <TextField
                 name="location"
@@ -135,24 +171,20 @@ export default function DefectFormDialog({ open, defect, onClose, onSubmit }) {
                 </TextField>
               </Grid>
             )}
+          </Grid>
+
+          <Divider />
+
+          {/* Section: who's logging it */}
+          <SectionLabel>Reporting</SectionLabel>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid size={12}>
               <TextField
                 name="reportedBy"
                 label="Reported By"
+                placeholder="e.g., Building Manager"
                 fullWidth
                 value={formik.values.reportedBy}
-                onChange={formik.handleChange}
-              />
-            </Grid>
-            <Grid size={12}>
-              <TextField
-                name="description"
-                label="Description"
-                placeholder="Describe the defect..."
-                fullWidth
-                multiline
-                rows={3}
-                value={formik.values.description}
                 onChange={formik.handleChange}
               />
             </Grid>
