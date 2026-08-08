@@ -8,6 +8,7 @@ export const fetchSchedule = (id) => client.get(`/scheduling/${id}`).then((r) =>
 export const createSchedule = (payload) => client.post('/scheduling', payload).then((r) => r.data.data);
 export const updateSchedule = (id, payload) => client.put(`/scheduling/${id}`, payload).then((r) => r.data.data);
 export const deleteSchedule = (id) => client.delete(`/scheduling/${id}`).then((r) => r.data.data);
+export const importSchedules = (rows) => client.post('/scheduling/import', { rows }).then((r) => r.data.data);
 
 // Template-based draft note generator (see the matching backend controller
 // for why this isn't a live AI call) — takes the in-progress form fields and

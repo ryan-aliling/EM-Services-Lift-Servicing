@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
@@ -9,16 +9,14 @@ import {
   DialogContent,
   DialogTitle,
   Grid,
-  IconButton,
   MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import LiftSelect from '../lifts/LiftSelect';
 import { generateDraftNotes } from '../../api/scheduleApi';
-import { useFileUpload } from '../../hooks/useFileUpload';
+import { listUsers } from '../../api/authApi';
 import { SCHEDULE_STATUSES } from '../../utils/scheduleHelpers';
 
 const emptySchedule = {
@@ -27,26 +25,11 @@ const emptySchedule = {
   blockAddress: '',
   scheduledDate: '',
   assignedInspector: '',
+  assignedStaffId: '',
   notes: '',
   status: 'Scheduled',
   liftId: '',
-  attachments: [],
 };
-
-// Client-side gate before we ever call the shared upload hook — the presign
-// endpoint has no file-type/size checks of its own, so this is the only
-// guard in place today. Limits are generous enough for a phone photo or a
-// short voice note while keeping uploads fast on a mobile connection.
-const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_ATTACHMENT_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'audio/mpeg',
-  'audio/wav',
-  'audio/mp4',
-  'audio/x-m4a',
-];
 
 const schema = Yup.object({
   townCouncil: Yup.string().trim().required('Town council is required'),
@@ -61,7 +44,18 @@ const schema = Yup.object({
 export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, initialLiftId }) {
   const [draftLoading, setDraftLoading] = useState(false);
   const [localError, setLocalError] = useState(null);
-  const { uploadFile, uploading, progress, error: uploadError } = useFileUpload();
+  const [staffOptions, setStaffOptions] = useState([]);
+
+  // This dialog only ever opens for Admin/Master (SchedulingStep.jsx gates the Add/Edit
+  // buttons that trigger it), so listUsers() here always succeeds - no separate role
+  // check needed. Determines who can see/update this schedule as "their own" once
+  // assigned - see the Staff-scoping comments in schedulingController.js.
+  useEffect(() => {
+    if (!open) return;
+    listUsers()
+      .then((users) => setStaffOptions(users.filter((u) => u.role === 'Staff')))
+      .catch(() => setStaffOptions([]));
+  }, [open]);
 
   // initialLiftId is only ever consulted for a fresh record (no `schedule`) — e.g. the
   // Lift Workflow page's Scheduling step opens this dialog pre-linked to whichever lift
@@ -74,7 +68,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
           ...schedule,
           scheduledDate: schedule.scheduledDate ? schedule.scheduledDate.slice(0, 10) : '',
           liftId: schedule.liftId || '',
-          attachments: schedule.attachments || [],
+          assignedStaffId: schedule.assignedStaffId || '',
         }
       : { ...emptySchedule, liftId: initialLiftId || '' },
     validationSchema: schema,
@@ -121,51 +115,18 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
     }
   }
 
-  async function handleFileSelect(e) {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-
-    if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
-      setLocalError('Unsupported file type. Allowed: JPG, PNG, WebP, MP3, WAV, M4A.');
-      return;
-    }
-    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-      setLocalError('File is too large — 5MB max per attachment.');
-      return;
-    }
-
-    setLocalError(null);
-    try {
-      const url = await uploadFile(file);
-      formik.setFieldValue('attachments', [
-        ...formik.values.attachments,
-        { url, fileName: file.name, fileType: file.type },
-      ]);
-    } catch (err) {
-      setLocalError(err.message);
-    }
-  }
-
-  function handleRemoveAttachment(index) {
-    formik.setFieldValue(
-      'attachments',
-      formik.values.attachments.filter((_, i) => i !== index)
-    );
-  }
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <form onSubmit={formik.handleSubmit}>
         <DialogTitle>{schedule ? 'Edit Schedule' : 'New Spot-Check Schedule'}</DialogTitle>
-        <DialogContent dividers>
-          {(localError || uploadError) && (
-            <Typography color="error" variant="body2" sx={{ mb: 1.5 }}>
-              {localError || uploadError}
+        <DialogContent dividers sx={{ pt: 3 }}>
+          {localError && (
+            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+              {localError}
             </Typography>
           )}
 
-          <Box sx={{ mb: 2 }}>
+          <Box sx={{ mb: 3 }}>
             <LiftSelect
               value={formik.values.liftId}
               onChange={handleLiftChange}
@@ -175,8 +136,8 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
             />
           </Box>
 
-          <Grid container spacing={2}>
-            <Grid size={6}>
+          <Grid container spacing={2.5}>
+            <Grid item xs={6}>
               <TextField
                 name="townCouncil"
                 label="Town Council"
@@ -187,7 +148,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.townCouncil && formik.errors.townCouncil}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="liftCompany"
                 label="Lift Company"
@@ -198,7 +159,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.liftCompany && formik.errors.liftCompany}
               />
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <TextField
                 name="blockAddress"
                 label="Block / Lift Address"
@@ -209,7 +170,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.blockAddress && formik.errors.blockAddress}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="scheduledDate"
                 label="Scheduled Date"
@@ -222,7 +183,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.scheduledDate && formik.errors.scheduledDate}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 select
                 name="status"
@@ -238,18 +199,37 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 ))}
               </TextField>
             </Grid>
-            <Grid size={12}>
+            <Grid item xs={6}>
               <TextField
                 name="assignedInspector"
                 label="Assigned Inspector"
                 fullWidth
                 value={formik.values.assignedInspector}
                 onChange={formik.handleChange}
+                helperText="Free-text display label"
               />
             </Grid>
+            <Grid item xs={6}>
+              <TextField
+                select
+                name="assignedStaffId"
+                label="Assigned Staff Account"
+                fullWidth
+                value={formik.values.assignedStaffId}
+                onChange={formik.handleChange}
+                helperText="Who can see/update this in their own Staff view"
+              >
+                <MenuItem value="">— Unassigned —</MenuItem>
+                {staffOptions.map((s) => (
+                  <MenuItem key={s._id} value={s._id}>
+                    {s.name} ({s.email})
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
 
-            <Grid size={12}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+            <Grid item xs={12}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.75}>
                 <Typography variant="body2">Notes</Typography>
                 <Button size="small" onClick={handleGenerateDraft} disabled={draftLoading}>
                   {draftLoading ? 'Generating…' : 'Generate Draft from AI'}
@@ -259,54 +239,18 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 name="notes"
                 fullWidth
                 multiline
-                rows={2}
+                rows={3}
                 value={formik.values.notes}
                 onChange={formik.handleChange}
               />
             </Grid>
-
-            <Grid size={12}>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                Attachments (photos / audio field notes)
-              </Typography>
-              <Button component="label" variant="outlined" size="small" disabled={uploading}>
-                {uploading ? `Uploading… ${progress}%` : 'Add Attachment'}
-                <input
-                  type="file"
-                  hidden
-                  accept="image/jpeg,image/png,image/webp,audio/*"
-                  onChange={handleFileSelect}
-                />
-              </Button>
-              {formik.values.attachments.length > 0 && (
-                <Stack spacing={0.5} sx={{ mt: 1 }}>
-                  {formik.values.attachments.map((attachment, index) => (
-                    <Stack key={attachment.url} direction="row" alignItems="center" spacing={1}>
-                      <Typography
-                        variant="body2"
-                        component="a"
-                        href={attachment.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        sx={{ flexGrow: 1 }}
-                      >
-                        {attachment.fileName || attachment.url}
-                      </Typography>
-                      <IconButton size="small" onClick={() => handleRemoveAttachment(index)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={onClose} disabled={formik.isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={formik.isSubmitting || uploading}>
+          <Button type="submit" variant="contained" disabled={formik.isSubmitting}>
             {schedule ? 'Save Changes' : 'Create Schedule'}
           </Button>
         </DialogActions>

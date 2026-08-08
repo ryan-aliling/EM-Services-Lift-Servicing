@@ -51,18 +51,18 @@ export default function RectificationDetail({ open, rectification, onClose, onEd
         </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ mb: 2.5 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <Field label="Defect">
                 {defect.defectNo ? `${defect.defectNo} — ${defect.title || defect.description || ''}` : '—'}
               </Field>
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <Field label="Rectified By">{rectification.rectifiedBy}</Field>
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <Field label="Lift Company">{rectification.liftCompanyName}</Field>
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <Field label="Date Rectified">{formatDate(rectification.dateRectified)}</Field>
             </Grid>
           </Grid>
@@ -137,15 +137,15 @@ export default function RectificationDetail({ open, rectification, onClose, onEd
           <Divider />
 
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <Field label="Remarks">{rectification.remarks}</Field>
             </Grid>
             {rectification.status === 'Endorsed' && (
               <>
-                <Grid size={6}>
+                <Grid item xs={6}>
                   <Field label="Endorsed By">{rectification.endorsedBy}</Field>
                 </Grid>
-                <Grid size={6}>
+                <Grid item xs={6}>
                   <Field label="Endorsed Date">{formatDate(rectification.endorsedDate)}</Field>
                 </Grid>
               </>

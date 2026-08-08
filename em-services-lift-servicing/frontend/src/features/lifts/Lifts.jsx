@@ -320,16 +320,16 @@ export default function Lifts() {
 
       {stats && (
         <Grid container spacing={2} mb={3}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid item xs={12} sm={6} md={3}>
             <StatCard label="Total Lifts" value={stats.total} icon={<ElevatorIcon />} color="primary.main" />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid item xs={12} sm={6} md={3}>
             <StatCard label="Active" value={stats.active} icon={<ElevatorIcon />} color="success.main" />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid item xs={12} sm={6} md={3}>
             <StatCard label="Under Maintenance" value={stats.maintenance} icon={<BuildIcon />} color="warning.main" />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid item xs={12} sm={6} md={3}>
             <StatCard label="Out of Service" value={stats.outOfService} icon={<BlockIcon />} color="error.main" />
           </Grid>
         </Grid>

@@ -64,7 +64,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
         <DialogTitle>{lift ? `Edit Lift ${lift.liftCode}` : 'Add Lift'}</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="liftCode"
                 label="Lift Code"
@@ -75,7 +75,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 helperText={formik.touched.liftCode && formik.errors.liftCode}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="block"
                 label="Block"
@@ -86,7 +86,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 helperText={formik.touched.block && formik.errors.block}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="unit"
                 label="Unit"
@@ -97,7 +97,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 helperText={formik.touched.unit && formik.errors.unit}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 select
                 name="type"
@@ -113,7 +113,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 ))}
               </TextField>
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="capacity"
                 label="Capacity (kg)"
@@ -125,7 +125,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 helperText={formik.touched.capacity && formik.errors.capacity}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 select
                 name="status"
@@ -141,7 +141,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 ))}
               </TextField>
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="manufacturer"
                 label="Manufacturer"
@@ -150,7 +150,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 onChange={formik.handleChange}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="installDate"
                 label="Install Date"
@@ -161,7 +161,7 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 onChange={formik.handleChange}
               />
             </Grid>
-            <Grid size={6}>
+            <Grid item xs={6}>
               <TextField
                 name="lastServiced"
                 label="Last Serviced"

@@ -1,17 +1,4 @@
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
 import StatusStepper from './StatusStepper';
 import { downloadSchedulePdf } from './generateSchedulePdf';
 import { formatDate } from '../../utils/formatDate';
@@ -22,16 +9,14 @@ import { formatDate } from '../../utils/formatDate';
 export default function ScheduleDetailsModal({ open, schedule, onClose }) {
   if (!schedule) return null;
 
-  const attachments = schedule.attachments || [];
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{schedule.blockAddress}</DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2}>
+      <DialogContent dividers sx={{ pt: 3 }}>
+        <Stack spacing={2.5}>
           <StatusStepper status={schedule.status} />
 
-          <Stack spacing={0.5}>
+          <Stack spacing={0.75}>
             <Typography variant="body2">
               <strong>Town Council:</strong> {schedule.townCouncil}
             </Typography>
@@ -48,42 +33,9 @@ export default function ScheduleDetailsModal({ open, schedule, onClose }) {
               <strong>Notes:</strong> {schedule.notes || '—'}
             </Typography>
           </Stack>
-
-          <Divider />
-
-          <Typography variant="subtitle2">Attachments</Typography>
-          {attachments.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
-              No attachments.
-            </Typography>
-          )}
-          {attachments.length > 0 && (
-            <List dense disablePadding>
-              {attachments.map((attachment) => (
-                <ListItem key={attachment.url} disableGutters>
-                  {attachment.fileType?.startsWith('image/') && (
-                    <Box
-                      component="img"
-                      src={attachment.url}
-                      alt={attachment.fileName}
-                      sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, mr: 1.5 }}
-                    />
-                  )}
-                  <ListItemText
-                    primary={attachment.fileName || attachment.url}
-                    secondary={
-                      <a href={attachment.url} target="_blank" rel="noreferrer">
-                        Open
-                      </a>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
         </Stack>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose}>Close</Button>
         <Button variant="contained" onClick={() => downloadSchedulePdf(schedule)}>
           Generate PDF

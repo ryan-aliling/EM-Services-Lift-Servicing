@@ -88,3 +88,44 @@ export function rowsToLiftPayloads(rows) {
     }, {})
   );
 }
+
+// Maps recognised header labels to Schedule model fields — accepts both the
+// plain field name and the human-readable label used by exportToCSV/
+// SCHEDULE_CSV_COLUMNS, so a file this app exported re-imports cleanly.
+// liftId/assignedStaffId are relational ids, not practical to hand-type in a
+// CSV, so they're intentionally not importable columns here (same scope
+// decision as the Lifts import, which doesn't import relational fields either).
+const SCHEDULE_HEADER_ALIASES = {
+  towncouncil: 'townCouncil',
+  'town council': 'townCouncil',
+  liftcompany: 'liftCompany',
+  'lift company': 'liftCompany',
+  blockaddress: 'blockAddress',
+  'block/lift address': 'blockAddress',
+  'block address': 'blockAddress',
+  scheduleddate: 'scheduledDate',
+  'scheduled date': 'scheduledDate',
+  assignedinspector: 'assignedInspector',
+  'assigned inspector': 'assignedInspector',
+  status: 'status',
+  notes: 'notes',
+};
+
+// Converts parsed CSV rows (first row = header) into schedule payload
+// objects ready to POST to /api/scheduling/import. Same blank-cell/
+// unrecognised-column handling as rowsToLiftPayloads.
+export function rowsToSchedulePayloads(rows) {
+  if (rows.length < 2) return [];
+
+  const fieldKeys = rows[0].map((header) => SCHEDULE_HEADER_ALIASES[header.trim().toLowerCase()] || null);
+
+  return rows.slice(1).map((cells) =>
+    fieldKeys.reduce((payload, key, idx) => {
+      if (!key) return payload;
+      const raw = (cells[idx] ?? '').trim();
+      if (raw === '') return payload;
+      payload[key] = raw;
+      return payload;
+    }, {})
+  );
+}

@@ -1,11 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSnackbar } from 'notistack';
-import { Box, Button, IconButton, MenuItem, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/EditOutlined';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/DownloadOutlined';
+import UploadIcon from '@mui/icons-material/UploadFileOutlined';
 import VisibilityIcon from '@mui/icons-material/VisibilityOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForwardOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined';
@@ -17,10 +31,21 @@ import * as scheduleApi from '../../../api/scheduleApi';
 import { SCHEDULE_STATUSES, NEXT_STATUS, isOverdue } from '../../../utils/scheduleHelpers';
 import { formatDate } from '../../../utils/formatDate';
 import { exportToCSV } from '../../../utils/csvExport';
+import { parseCSV, rowsToSchedulePayloads } from '../../../utils/csvImport';
 import { SCHEDULE_CSV_COLUMNS } from '../../scheduling/scheduleCsvColumns';
 import { SCHEDULE_STATUS_COLORS } from '../../../theme/statusColors';
 import { useAuth } from '../../../context/AuthContext';
 import { ROLES, isAdminOrMaster } from '../../../utils/roles';
+
+const IMPORT_TEMPLATE_ROW = {
+  townCouncil: 'Tampines Town Council',
+  liftCompany: 'ABC Lifts Pte Ltd',
+  blockAddress: 'Blk 201 Tampines St 21',
+  scheduledDate: '2026-09-01',
+  assignedInspector: 'John Tan',
+  status: 'Scheduled',
+  notes: 'Monthly spot-check',
+};
 
 // Step 1 of the Lift Workflow - same CRUD/API as the standalone Scheduling page (Student
 // owner's scheduleApi + ScheduleFormDialog are reused untouched), just scoped down to
@@ -47,6 +72,10 @@ export default function SchedulingStep({ lift }) {
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewingSchedule, setViewingSchedule] = useState(null);
+
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -123,6 +152,47 @@ export default function SchedulingStep({ lift }) {
     exportToCSV(`schedules-${lift.liftCode}.csv`, filteredSchedules, SCHEDULE_CSV_COLUMNS);
   };
 
+  const handleDownloadTemplate = () => {
+    exportToCSV('schedules-import-template.csv', [IMPORT_TEMPLATE_ROW], SCHEDULE_CSV_COLUMNS);
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so re-selecting the same file still fires onChange
+
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      enqueueSnackbar('Only .csv files are supported', { variant: 'error' });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const payloads = rowsToSchedulePayloads(parseCSV(text));
+      if (!payloads.length) {
+        enqueueSnackbar('No data rows found in that CSV', { variant: 'warning' });
+        return;
+      }
+
+      const result = await scheduleApi.importSchedules(payloads);
+      setImportResult({ ...result, total: payloads.length });
+      enqueueSnackbar(
+        result.failed.length
+          ? `Imported ${result.created} of ${payloads.length} schedule(s) — ${result.failed.length} failed`
+          : `Imported ${result.created} schedule(s)`,
+        { variant: result.failed.length ? 'warning' : 'success' }
+      );
+      load();
+    } catch (err) {
+      enqueueSnackbar(err.response?.data?.message || 'Failed to import CSV', { variant: 'error' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const columns = [
     {
       field: 'scheduledDate',
@@ -189,23 +259,57 @@ export default function SchedulingStep({ lift }) {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h6">Scheduling — {lift.liftCode}</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
+        <Box>
+          <Typography variant="h6">Scheduling — {lift.liftCode}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
+            Plan and track this lift's spot-check visits: set the service date, assign a
+            technician/inspector, and move each visit through Scheduled → Assigned → In
+            Progress → Completed as work happens.
+          </Typography>
+          {canManageSchedule && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Importing schedules?{' '}
+              <Button
+                size="small"
+                onClick={handleDownloadTemplate}
+                sx={{ p: 0, minWidth: 0, fontSize: 'inherit', verticalAlign: 'baseline' }}
+              >
+                Download the CSV template
+              </Button>
+            </Typography>
+          )}
+        </Box>
         <Stack direction="row" spacing={1.5}>
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
           </Button>
           {canManageSchedule && (
-            <Button
-              startIcon={<AddIcon />}
-              variant="contained"
-              onClick={() => {
-                setEditingSchedule(null);
-                setFormOpen(true);
-              }}
-            >
-              Add Schedule
-            </Button>
+            <>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleFileSelected} />
+              <Tooltip title="Import schedules from a .csv file">
+                <span>
+                  <Button
+                    startIcon={<UploadIcon />}
+                    variant="outlined"
+                    onClick={handleImportClick}
+                    disabled={importing}
+                  >
+                    {importing ? 'Importing…' : 'Import CSV'}
+                  </Button>
+                </span>
+              </Tooltip>
+              <Button
+                startIcon={<AddIcon />}
+                variant="contained"
+                onClick={() => {
+                  setEditingSchedule(null);
+                  setFormOpen(true);
+                }}
+              >
+                Add Schedule
+              </Button>
+            </>
           )}
         </Stack>
       </Stack>
@@ -283,6 +387,46 @@ export default function SchedulingStep({ lift }) {
         schedule={viewingSchedule}
         onClose={() => setViewingSchedule(null)}
       />
+
+      <ImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
     </Box>
+  );
+}
+
+// Mirrors Lifts.jsx's ImportResultDialog exactly (same shape from the backend:
+// { created, failed: [{row, message}] }) - kept as a local copy rather than a
+// shared component since the two features' row-identifier column differs
+// (liftCode vs blockAddress).
+function ImportResultDialog({ result, onClose }) {
+  if (!result) return null;
+  const { created, total, failed } = result;
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Import Results</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: failed.length ? 2 : 0 }}>
+          Imported <strong>{created}</strong> of <strong>{total}</strong> row(s).
+        </Typography>
+        {failed.length > 0 && (
+          <Stack spacing={1}>
+            <Typography variant="subtitle2" color="error">
+              {failed.length} row(s) failed:
+            </Typography>
+            {failed.map((f) => (
+              <Typography key={f.row} variant="body2" color="text.secondary">
+                Row {f.row}
+                {f.blockAddress ? ` (${f.blockAddress})` : ''}: {f.message}
+              </Typography>
+            ))}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} variant="contained">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

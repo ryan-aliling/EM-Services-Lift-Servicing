@@ -4,6 +4,7 @@ import Lifts from './features/lifts/Lifts';
 import LiftWorkflowPage from './features/lift-workflow/LiftWorkflowPage';
 import DashboardPage from './features/dashboard/DashboardPage';
 import AccountsPage from './features/accounts/AccountsPage';
+import SettingsPage from './features/settings/SettingsPage';
 
 // Each feature owner mounts their page component here under their tab id.
 // Tabs without an entry yet fall back to the "coming soon" placeholder.
@@ -18,6 +19,7 @@ const FEATURE_PAGES = {
   lifts: Lifts,
   'lift-workflow': LiftWorkflowPage,
   accounts: AccountsPage,
+  settings: SettingsPage,
 };
 
 export default function Workspace({ tabs, activeTab }) {
@@ -25,7 +27,7 @@ export default function Workspace({ tabs, activeTab }) {
   const FeaturePage = FEATURE_PAGES[activeTab];
 
   return (
-    <Box component="main" sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+    <Box component="main" sx={{ maxWidth: 1600, mx: 'auto', p: { xs: 2, sm: 3 } }}>
       {FeaturePage ? (
         <FeaturePage />
       ) : (
