@@ -47,7 +47,11 @@ export const DEFECT_STATUS_COLORS = {
   Closed: 'default',
 };
 
+// Rectifications module has landed (backend/src/models/rectifications/Rectification.js) -
+// matches its real status enum exactly (previously Pending/Completed, a placeholder from
+// before the module existed).
 export const RECTIFICATION_STATUS_COLORS = {
-  Pending: 'warning',
-  Completed: 'success',
+  Draft: 'default',
+  Submitted: 'info',
+  Endorsed: 'success',
 };

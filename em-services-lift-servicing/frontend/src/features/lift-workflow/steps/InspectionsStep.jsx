@@ -36,30 +36,27 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import DownloadIcon from '@mui/icons-material/DownloadOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlined';
-import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import StatCard from '../../components/StatCard';
-import StatusChip from '../../components/StatusChip';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import InspectionFormDialog from './InspectionFormDialog';
-import * as inspectionApi from '../../api/inspectionApi';
-import { formatDate } from '../../utils/formatDate';
-import { exportToCSV } from '../../utils/csvExport';
-import { INSPECTION_STATUS_COLORS, DEFECT_COMPLIANCE_COLORS, DEFECT_SEVERITY_COLORS } from '../../theme/statusColors';
-import { useAuth } from '../../context/AuthContext';
-import { canEditReport, canDeleteReport } from './inspectionHelpers';
+import StatusChip from '../../../components/StatusChip';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import InspectionFormDialog from '../../inspections/InspectionFormDialog';
+import * as inspectionApi from '../../../api/inspectionApi';
+import { formatDate } from '../../../utils/formatDate';
+import { exportToCSV } from '../../../utils/csvExport';
+import { INSPECTION_STATUS_COLORS, DEFECT_COMPLIANCE_COLORS, DEFECT_SEVERITY_COLORS } from '../../../theme/statusColors';
+import { useAuth } from '../../../context/AuthContext';
+import { canEditReport, canDeleteReport } from '../../inspections/inspectionHelpers';
 
 const STATUS_OPTIONS = ['Draft', 'Submitted', 'Under Review', 'Closed'];
 
-export default function Inspections() {
+// Step 2 of the Lift Workflow - same CRUD/API as the standalone Inspections page, scoped
+// down to reports linked to the currently selected lift. Builds on Step 1: a fresh report
+// created here already carries this lift's id (InspectionFormDialog's initialLiftId).
+export default function InspectionsStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const canEdit = user.role === 'Admin' || user.role === 'Manager';
 
   const [reports, setReports] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -70,15 +67,13 @@ export default function Inspections() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingReport, setEditingReport] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [viewingReport, setViewingReport] = useState(null); // "actual page" instead of a popup - see below
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [viewingReport, setViewingReport] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [list, s] = await Promise.all([inspectionApi.fetchInspections(), inspectionApi.fetchInspectionStats()]);
+      const list = await inspectionApi.fetchInspections();
       setReports(list);
-      setStats(s);
     } catch {
       enqueueSnackbar('Failed to load inspection reports - is the backend running?', { variant: 'error' });
     } finally {
@@ -91,9 +86,11 @@ export default function Inspections() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const liftReports = useMemo(() => reports.filter((r) => r.liftId === lift._id), [reports, lift._id]);
+
   const shownReports = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return reports
+    return liftReports
       .filter((r) => {
         const matchesSearch = !q || [r.reportNo, r.liftCode, r.block, r.inspectorName].some((v) => String(v || '').toLowerCase().includes(q));
         const matchesStatus = statusFilter.length === 0 || statusFilter.includes(r.overallStatus);
@@ -105,7 +102,7 @@ export default function Inspections() {
         const bVal = sortField === 'compliance' ? b.compliance : b[sortField];
         return String(aVal).localeCompare(String(bVal), undefined, { numeric: true }) * (sortDirection === 'asc' ? 1 : -1);
       });
-  }, [reports, search, statusFilter, sortField, sortDirection]);
+  }, [liftReports, search, statusFilter, sortField, sortDirection]);
 
   const openCreate = () => { setEditingReport(null); setFormOpen(true); };
   const openEdit = (report) => { setEditingReport(report); setFormOpen(true); };
@@ -128,16 +125,6 @@ export default function Inspections() {
     }
   };
 
-  const handleNotify = async (report) => {
-    try {
-      const res = await inspectionApi.notifyContractor(report._id);
-      enqueueSnackbar(res.message || 'Contractor notified', { variant: 'success' });
-      load();
-    } catch (err) {
-      enqueueSnackbar(err.response?.data?.message || 'Failed to notify contractor', { variant: 'error' });
-    }
-  };
-
   const handleDelete = async () => {
     try {
       const res = await inspectionApi.deleteInspection(deleteTarget._id);
@@ -151,10 +138,8 @@ export default function Inspections() {
   };
 
   const handleExport = () => {
-    exportToCSV('inspection-reports.csv', shownReports, [
+    exportToCSV(`inspection-reports-${lift.liftCode}.csv`, shownReports, [
       { label: 'Report No.', value: (r) => r.reportNo },
-      { label: 'Lift Code', value: (r) => r.liftCode },
-      { label: 'Block', value: (r) => r.block },
       { label: 'Inspection Date', value: (r) => formatDate(r.inspectionDate) },
       { label: 'Inspector', value: (r) => r.inspectorName },
       { label: 'Contractor', value: (r) => r.contractor },
@@ -164,44 +149,32 @@ export default function Inspections() {
     ]);
   };
 
-  // The interim review feedback asked for viewing a report to open an actual page instead of
-  // a popup. The app's routing (App.jsx) is tab-based rather than per-entity, so "page" here
-  // means swapping this feature's own content for a full-width detail view - not a Dialog -
-  // rather than introducing nested routes just for this one case.
   if (viewingReport) {
-    return <InspectionDetailView report={viewingReport} onBack={() => setViewingReport(null)} onEdit={canEdit ? () => { setViewingReport(null); openEdit(viewingReport); } : null} />;
+    return (
+      <InspectionDetailView
+        report={viewingReport}
+        onBack={() => setViewingReport(null)}
+        onEdit={canEdit ? () => { setViewingReport(null); openEdit(viewingReport); } : null}
+      />
+    );
   }
 
   return (
     <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>Inspection Management</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Record lift spot-check inspections, track findings, and monitor compliance status.
-        </Typography>
-      </Box>
-
-      {stats && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} sm={3}><StatCard label="Total Reports" value={stats.total} icon={<FactCheckOutlinedIcon />} color="primary.main" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard label="Draft" value={stats.draft} icon={<PendingActionsOutlinedIcon />} color="text.secondary" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard label="Submitted / Under Review" value={stats.submitted} icon={<AssignmentTurnedInOutlinedIcon />} color="info.main" /></Grid>
-          <Grid item xs={6} sm={3}><StatCard label="Critical Defects Open" value={stats.criticalOpen} icon={<WarningAmberOutlinedIcon />} color="error.main" /></Grid>
-        </Grid>
-      )}
+      <Typography variant="h6" sx={{ mb: 2 }}>Inspections — {lift.liftCode}</Typography>
 
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>Inspection Reports</Typography>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Inspection Reports</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
             <TextField
               size="small"
-              placeholder="Search by report no., lift code, block or inspector..."
+              placeholder="Search by report no., block or inspector..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              sx={{ width: searchFocused || search ? 420 : 260, transition: 'width 0.2s ease' }}
+              sx={{ width: searchFocused || search ? 380 : 240, transition: 'width 0.2s ease' }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
             />
             <Select
@@ -243,12 +216,12 @@ export default function Inspections() {
         </Box>
 
         {!loading && shownReports.length === 0 ? (
-          <Box sx={{ p: 7, textAlign: 'center' }}><Typography color="text.secondary">No inspection reports found.</Typography></Box>
+          <Box sx={{ p: 7, textAlign: 'center' }}><Typography color="text.secondary">No inspection reports found for this lift.</Typography></Box>
         ) : (
           <Table size="small">
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                <TableCell>Report No.</TableCell><TableCell>Lift Code</TableCell><TableCell>Block</TableCell>
+                <TableCell>Report No.</TableCell>
                 <TableCell>Inspection Date</TableCell><TableCell>Inspector</TableCell><TableCell>Compliance</TableCell>
                 <TableCell>Report Status</TableCell><TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -260,8 +233,6 @@ export default function Inspections() {
                 return (
                   <TableRow key={r._id} hover>
                     <TableCell><strong>{r.reportNo}</strong></TableCell>
-                    <TableCell>{r.liftCode}</TableCell>
-                    <TableCell>{r.block}</TableCell>
                     <TableCell>{formatDate(r.inspectionDate)}</TableCell>
                     <TableCell>{r.inspectorName}</TableCell>
                     <TableCell><StatusChip value={r.compliance} colorMap={DEFECT_COMPLIANCE_COLORS} /></TableCell>
@@ -290,6 +261,7 @@ export default function Inspections() {
       <InspectionFormDialog
         open={formOpen}
         inspection={editingReport}
+        initialLiftId={lift._id}
         onClose={() => { setFormOpen(false); setEditingReport(null); }}
         onSubmit={handleSave}
       />
@@ -316,6 +288,9 @@ function Field({ label, value }) {
   );
 }
 
+// Mirrors Inspections.jsx's own detail-view swap (see comment there): the app's routing is
+// tab-based rather than per-entity, so "viewing a report" swaps this step's own content for a
+// full-width detail view instead of introducing a nested route or a dialog.
 function InspectionDetailView({ report, onBack, onEdit }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const isDraft = canEditReport(report.overallStatus);
@@ -323,7 +298,7 @@ function InspectionDetailView({ report, onBack, onEdit }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>Back to Inspections</Button>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>Back to Inspection Reports</Button>
         {isDraft && onEdit && <Button variant="outlined" startIcon={<EditIcon />} onClick={onEdit}>Edit Report</Button>}
       </Box>
 
@@ -340,8 +315,6 @@ function InspectionDetailView({ report, onBack, onEdit }) {
         </Box>
         <Divider sx={{ mb: 2 }} />
         <Grid container spacing={3}>
-          <Grid item xs={6} sm={3}><Field label="Lift Code" value={report.liftCode} /></Grid>
-          <Grid item xs={6} sm={3}><Field label="Block" value={report.block} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Inspection Date" value={formatDate(report.inspectionDate)} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Inspector" value={report.inspectorName} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Contractor" value={report.contractor} /></Grid>

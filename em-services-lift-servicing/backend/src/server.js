@@ -10,8 +10,11 @@ const mongoose = require('mongoose');
 // Pointing Node directly at public DNS resolvers avoids that.
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
-// TODO: re-enable once AWS_REGION/AWS_ACCESS_KEY_ID/etc. are set in .env — the S3 client crashes on import without them
-// const uploadsRouter = require('./routes/uploads');
+// File uploads (photos, e-signatures, etc.) go through Cloudinary's signed-upload flow -
+// this router only ever hands out a short-lived signature (see routes/uploads.js), never
+// the API secret itself, and 503s until CLOUDINARY_* env vars are configured. Needed here
+// because Rectifications (photos + e-signature) and Scheduling both upload through it.
+const uploadsRouter = require('./routes/uploads');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,7 +26,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// app.use('/api/uploads', uploadsRouter);
+app.use('/api/uploads', uploadsRouter);
 
 app.use('/api/scheduling', require('./routes/scheduling/schedulingRoutes'));
 
@@ -33,8 +36,7 @@ app.use('/api/inspections', require('./routes/inspections/inspectionsRoutes'));
 
 app.use('/api/defects', require('./routes/defects/defectsRoutes'));
 
-// TODO: mount remaining feature routers here as they're built, e.g.
-// app.use('/api/rectifications', require('./routes/rectifications/rectificationsRoutes'));
+app.use('/api/rectifications', require('./routes/rectifications/rectificationsRoutes'));
 
 // Added while building the inspections module: nothing in the repo was catching errors
 // thrown/forwarded by asyncHandler (ApiError.badRequest/notFound etc.) before this, so they

@@ -10,7 +10,8 @@
     "test": "echo \"TODO: add frontend tests\"",
     "test:aeric": "vitest run tests/Aeric",
     "test:javier": "vitest run tests/Javier",
-    "test:elijah": "vitest run tests/Elijah"
+    "test:elijah": "vitest run tests/Elijah",
+    "test:ryan": "vitest run tests/Ryan"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

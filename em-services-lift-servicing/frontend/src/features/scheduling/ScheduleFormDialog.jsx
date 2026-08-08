@@ -58,11 +58,14 @@ const schema = Yup.object({
   notes: Yup.string(),
 });
 
-export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit }) {
+export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, initialLiftId }) {
   const [draftLoading, setDraftLoading] = useState(false);
   const [localError, setLocalError] = useState(null);
   const { uploadFile, uploading, progress, error: uploadError } = useFileUpload();
 
+  // initialLiftId is only ever consulted for a fresh record (no `schedule`) — e.g. the
+  // Lift Workflow page's Scheduling step opens this dialog pre-linked to whichever lift
+  // is currently selected, and locks the picker below so that link can't drift mid-flow.
   const formik = useFormik({
     enableReinitialize: true,
     initialValues: schedule
@@ -73,7 +76,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit }
           liftId: schedule.liftId || '',
           attachments: schedule.attachments || [],
         }
-      : emptySchedule,
+      : { ...emptySchedule, liftId: initialLiftId || '' },
     validationSchema: schema,
     onSubmit: async (values, { setSubmitting }) => {
       try {
@@ -168,6 +171,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit }
               onChange={handleLiftChange}
               label="Link to a Lift (optional)"
               helperText="Auto-fills Block/Lift Address from the Lifts directory"
+              disabled={Boolean(initialLiftId) && !schedule}
             />
           </Box>
 

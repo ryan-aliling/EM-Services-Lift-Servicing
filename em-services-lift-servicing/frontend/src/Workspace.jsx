@@ -1,9 +1,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
 import Lifts from './features/lifts/Lifts';
-import SchedulingPage from './features/scheduling/SchedulingPage';
-import Inspections from './features/inspections/Inspections';
-import Defects from './features/defects/Defects';
+import LiftWorkflowPage from './features/lift-workflow/LiftWorkflowPage';
 import DashboardPage from './features/dashboard/DashboardPage';
 
 // Each feature owner mounts their page component here under their tab id.
@@ -12,12 +10,12 @@ import DashboardPage from './features/dashboard/DashboardPage';
 // whichever page matched FEATURE_PAGES (so the Scheduling tab was showing
 // the full Lifts grid stacked above SchedulingPage) — keyed properly here
 // so each tab renders only its own feature.
+// Scheduling/Inspections/Defects/Rectifications used to each be their own entry here -
+// they're now combined into the single 'lift-workflow' entry (see App.jsx TABS comment).
 const FEATURE_PAGES = {
   dashboard: DashboardPage,
   lifts: Lifts,
-  scheduling: SchedulingPage,
-  inspections: Inspections,
-  defects: Defects,
+  'lift-workflow': LiftWorkflowPage,
 };
 
 export default function Workspace({ tabs, activeTab }) {

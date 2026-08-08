@@ -1,46 +1,37 @@
 const express = require('express');
-const crypto = require('crypto');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const cloudinary = require('../utils/cloudinary');
 
 const router = express.Router();
 
-// Built lazily (on first request) instead of at module-load time, so a
-// missing AWS_REGION only breaks this endpoint instead of crashing the
-// whole server on startup.
-let s3;
-function getS3Client() {
-  if (!s3) s3 = new S3Client({ region: process.env.AWS_REGION });
-  return s3;
-}
+// Signed-upload flow: the frontend never sees CLOUDINARY_API_SECRET - it only gets a
+// short-lived signature computed with it, then uploads the file bytes straight to
+// Cloudinary itself (see useFileUpload.js), so file bytes never pass through our server.
+router.post('/signature', (req, res) => {
+  const { folder } = req.body || {};
 
-router.post('/presign', async (req, res) => {
-  const { fileName, fileType } = req.body;
-
-  if (!fileName || !fileType) {
-    return res.status(400).json({ error: 'fileName and fileType are required' });
-  }
-
-  if (!process.env.AWS_REGION || !process.env.AWS_S3_BUCKET) {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
     return res.status(503).json({ error: 'File uploads are not configured on this server yet' });
   }
 
   try {
-    const key = `${crypto.randomUUID()}-${fileName}`;
+    const timestamp = Math.round(Date.now() / 1000);
+    // Every param included here must be signed AND sent back to the client, which must
+    // in turn send that exact same set of params on the actual upload request - Cloudinary
+    // recomputes the signature server-side from whatever params arrive with the upload
+    // and rejects the request if it doesn't match.
+    const paramsToSign = folder ? { timestamp, folder } : { timestamp };
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
 
-    const command = new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: key,
-      ContentType: fileType,
+    res.json({
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      folder: folder || undefined,
     });
-
-    const uploadUrl = await getSignedUrl(getS3Client(), command, { expiresIn: 60 });
-    const fileUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-
-    res.json({ uploadUrl, fileUrl, key });
   } catch (err) {
-    console.error('Presign error:', err);
-    res.status(500).json({ error: 'Failed to generate upload URL' });
+    console.error('Cloudinary signature error:', err);
+    res.status(500).json({ error: 'Failed to generate upload signature' });
   }
 });
 
