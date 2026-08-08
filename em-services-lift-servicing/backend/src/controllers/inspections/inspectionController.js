@@ -56,11 +56,23 @@ async function resolveLiftSnapshot(liftId) {
 // wrong lift. This is what makes the Inspections step actually derive from the Scheduling
 // step instead of the two only coincidentally sharing a lift.
 async function assertScheduleMatchesLift(scheduleId, liftId) {
-  if (!scheduleId) return;
+  if (!scheduleId) return null;
   const schedule = await Schedule.findOne({ _id: scheduleId, isDeleted: false }).catch(() => null);
   if (!schedule) throw ApiError.badRequest('Selected schedule not found');
   if (schedule.liftId && String(schedule.liftId) !== String(liftId)) {
     throw ApiError.badRequest('Selected schedule is for a different lift');
+  }
+  return schedule;
+}
+
+// A Staff caller may only create/edit an inspection against a schedule assigned to them -
+// or one with no schedule link at all (still allowed per the role matrix). No-op for
+// Admin/Master, who have full visibility across every staff member's work.
+function assertScheduleAssignedToStaff(schedule, user) {
+  if (user.role !== 'Staff') return;
+  if (!schedule) return;
+  if (String(schedule.assignedStaffId) !== String(user._id)) {
+    throw ApiError.forbidden('You can only work with a schedule assigned to you');
   }
 }
 
@@ -113,7 +125,8 @@ const createInspection = asyncHandler(async (req, res) => {
 
   const reportNo = await nextReportNo();
   const { liftCode, block } = await resolveLiftSnapshot(req.body.liftId);
-  await assertScheduleMatchesLift(req.body.scheduleId, req.body.liftId);
+  const schedule = await assertScheduleMatchesLift(req.body.scheduleId, req.body.liftId);
+  assertScheduleAssignedToStaff(schedule, req.user);
   const defects = req.body.defects || [];
 
   const inspection = await Inspection.create({
@@ -153,10 +166,14 @@ const updateInspection = asyncHandler(async (req, res) => {
     update.block = block;
   }
 
-  // Re-validate the schedule link whenever either side of it changes, same rule as create.
+  // Re-validate the schedule link whenever either side of it changes, same rule as create -
+  // including the ownership check, so a Staff user can't create an inspection against their
+  // own schedule and then edit it to point at someone else's schedule instead.
   if ('scheduleId' in update || update.liftId) {
     const effectiveLiftId = update.liftId || existing.liftId;
-    await assertScheduleMatchesLift(update.scheduleId !== undefined ? update.scheduleId : existing.scheduleId, effectiveLiftId);
+    const effectiveScheduleId = update.scheduleId !== undefined ? update.scheduleId : existing.scheduleId;
+    const schedule = await assertScheduleMatchesLift(effectiveScheduleId, effectiveLiftId);
+    assertScheduleAssignedToStaff(schedule, req.user);
   }
 
   const inspection = await Inspection.findByIdAndUpdate(req.params.id, update, {

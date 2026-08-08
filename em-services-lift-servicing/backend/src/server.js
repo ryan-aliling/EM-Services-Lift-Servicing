@@ -1,5 +1,13 @@
 require('dotenv').config();
 
+// Fail fast rather than silently falling back to a guessable secret - every JWT this app
+// issues/verifies (backend/src/utils/jwt.js) is signed with this, so an unset secret would
+// otherwise mean either a crash deep inside jwt.sign() or, worse, a hardcoded default.
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not set. Add it to backend/.env before starting the server.');
+  process.exit(1);
+}
+
 const dns = require('dns');
 const express = require('express');
 const cors = require('cors');
@@ -27,6 +35,8 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/uploads', uploadsRouter);
+
+app.use('/api/auth', require('./routes/auth/authRoutes'));
 
 app.use('/api/scheduling', require('./routes/scheduling/schedulingRoutes'));
 

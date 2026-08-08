@@ -7,16 +7,18 @@ const {
   updateDefect,
   deleteDefect,
 } = require('../../controllers/defects/defectController');
+const { requireAuth, requireRole } = require('../../middleware/auth');
 
-// TODO: re-add requireAuth / requireRole('Admin', 'Manager') on write routes once a
-// login system exists and issues JWTs with a `role` claim (same TODO as liftRoutes.js).
+// Defects can be logged/edited freely by any authenticated role, including Staff, and are
+// not restricted to lifts/schedules assigned to them - only delete is locked down, same
+// posture as every other destructive action in this app.
 const router = express.Router();
 
-router.get('/', listDefects);
-router.get('/stats', defectStats); // must come before /:id or "stats" gets treated as an id
-router.get('/:id', getDefect);
-router.post('/', createDefect);
-router.put('/:id', updateDefect);
-router.delete('/:id', deleteDefect);
+router.get('/', requireAuth, listDefects);
+router.get('/stats', requireAuth, defectStats); // must come before /:id or "stats" gets treated as an id
+router.get('/:id', requireAuth, getDefect);
+router.post('/', requireAuth, createDefect);
+router.put('/:id', requireAuth, updateDefect);
+router.delete('/:id', requireAuth, requireRole('Admin', 'Master'), deleteDefect);
 
 module.exports = router;

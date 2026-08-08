@@ -7,17 +7,18 @@ const {
   endorseRectification,
   deleteRectification,
 } = require('../../controllers/rectifications/rectificationController');
+const { requireAuth, requireRole } = require('../../middleware/auth');
 
-// TODO: re-add requireAuth / requireRole('Admin', 'Manager') on write routes, and restrict
-// the endorse route to an EM-staff role specifically, once a login system exists (same TODO
-// as liftRoutes.js / defectsRoutes.js).
+// Create/submit/edit: any authenticated role, including Staff. Endorse is Admin/Master
+// only, under all circumstances - Staff can never call it, per the role matrix. Delete is
+// also Admin/Master only, same posture as every other destructive action in this app.
 const router = express.Router();
 
-router.get('/', listRectifications);
-router.get('/:id', getRectification);
-router.post('/', createRectification);
-router.put('/:id', updateRectification);
-router.patch('/:id/endorse', endorseRectification); // must come before nothing else conflicting - :id/endorse is unambiguous
-router.delete('/:id', deleteRectification);
+router.get('/', requireAuth, listRectifications);
+router.get('/:id', requireAuth, getRectification);
+router.post('/', requireAuth, createRectification);
+router.put('/:id', requireAuth, updateRectification);
+router.patch('/:id/endorse', requireAuth, requireRole('Admin', 'Master'), endorseRectification);
+router.delete('/:id', requireAuth, requireRole('Admin', 'Master'), deleteRectification);
 
 module.exports = router;

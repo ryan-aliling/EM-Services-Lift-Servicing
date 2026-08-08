@@ -3,6 +3,13 @@
 // Mounts only rectificationsRoutes against an in-memory MongoDB (mongodb-memory-server) -
 // deliberately NOT requiring src/server.js, since that file connects to the real
 // DATABASE_URL and calls app.listen as a side effect of just being imported.
+//
+// rectificationsRoutes now requires an authenticated caller on every route (RBAC pass) -
+// every request below runs as an Admin user via asUser(), which has unrestricted access
+// including endorse/delete, matching this suite's original (pre-RBAC) behavior. Staff-only
+// restrictions (cannot endorse) are covered separately in tests/Auth/auth.test.js.
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+
 const express = require('express');
 const request = require('supertest');
 const mongoose = require('mongoose');
@@ -12,6 +19,8 @@ const rectificationsRoutes = require('../../src/routes/rectifications/rectificat
 const Defect = require('../../src/models/defects/Defect');
 const Rectification = require('../../src/models/rectifications/Rectification');
 const Lift = require('../../src/models/lifts/Lift');
+const User = require('../../src/models/users/User');
+const { createTestUser, authHeader } = require('../testAuthHelper');
 
 function buildApp() {
   const app = express();
@@ -26,13 +35,29 @@ function buildApp() {
   return app;
 }
 
+function asUser(user) {
+  const header = authHeader(user);
+  return {
+    get: (url) => request(app).get(url).set('Authorization', header),
+    post: (url) => request(app).post(url).set('Authorization', header),
+    put: (url) => request(app).put(url).set('Authorization', header),
+    patch: (url) => request(app).patch(url).set('Authorization', header),
+    delete: (url) => request(app).delete(url).set('Authorization', header),
+  };
+}
+
 let mongod;
 let app;
+let admin;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
   app = buildApp();
+});
+
+beforeEach(async () => {
+  admin = await createTestUser('Admin');
 });
 
 afterAll(async () => {
@@ -44,6 +69,7 @@ afterEach(async () => {
   await Rectification.deleteMany({});
   await Defect.deleteMany({});
   await Lift.deleteMany({});
+  await User.deleteMany({});
 });
 
 // Every test needs a real Defect to point defectId at.
@@ -83,7 +109,7 @@ function baseBody(defect, overrides = {}) {
 
 describe('POST /api/rectifications', () => {
   test('requires defectId', async () => {
-    const res = await request(app)
+    const res = await asUser(admin)
       .post('/api/rectifications')
       .send({ rectifiedBy: 'John Tan', dateRectified: '2026-08-01' });
 
@@ -93,7 +119,7 @@ describe('POST /api/rectifications', () => {
 
   test('requires rectifiedBy and dateRectified', async () => {
     const defect = await createDefect();
-    const res = await request(app).post('/api/rectifications').send({ defectId: String(defect._id) });
+    const res = await asUser(admin).post('/api/rectifications').send({ defectId: String(defect._id) });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/rectifiedBy/);
@@ -102,7 +128,7 @@ describe('POST /api/rectifications', () => {
 
   test('rejects a defectId that does not resolve to a real defect', async () => {
     const fakeId = new mongoose.Types.ObjectId();
-    const res = await request(app)
+    const res = await asUser(admin)
       .post('/api/rectifications')
       .send({ defectId: String(fakeId), rectifiedBy: 'John Tan', dateRectified: '2026-08-01' });
 
@@ -112,7 +138,7 @@ describe('POST /api/rectifications', () => {
 
   test('creates a Draft when no photos/signature are supplied', async () => {
     const defect = await createDefect();
-    const res = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const res = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('Draft');
@@ -122,7 +148,7 @@ describe('POST /api/rectifications', () => {
 
   test('auto-promotes to Submitted when photos + signature are present', async () => {
     const defect = await createDefect();
-    const res = await request(app)
+    const res = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL }));
 
@@ -132,7 +158,7 @@ describe('POST /api/rectifications', () => {
 
   test('rejects an explicit "Submitted" status with no proof at all', async () => {
     const defect = await createDefect();
-    const res = await request(app).post('/api/rectifications').send(baseBody(defect, { status: 'Submitted' }));
+    const res = await asUser(admin).post('/api/rectifications').send(baseBody(defect, { status: 'Submitted' }));
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/at least 1 proof photo/);
@@ -141,7 +167,7 @@ describe('POST /api/rectifications', () => {
 
   test('rejects an explicit "Submitted" status missing only the signature', async () => {
     const defect = await createDefect();
-    const res = await request(app)
+    const res = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { status: 'Submitted', proofPhotos: [PHOTO_URL] }));
 
@@ -154,11 +180,11 @@ describe('POST /api/rectifications', () => {
 describe('GET /api/rectifications', () => {
   test('excludes soft-deleted records', async () => {
     const defect = await createDefect();
-    const kept = await request(app).post('/api/rectifications').send(baseBody(defect));
-    const removed = await request(app).post('/api/rectifications').send(baseBody(defect));
-    await request(app).delete(`/api/rectifications/${removed.body.data._id}`);
+    const kept = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
+    const removed = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
+    await asUser(admin).delete(`/api/rectifications/${removed.body.data._id}`);
 
-    const res = await request(app).get('/api/rectifications');
+    const res = await asUser(admin).get('/api/rectifications');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0]._id).toBe(kept.body.data._id);
@@ -166,9 +192,9 @@ describe('GET /api/rectifications', () => {
 
   test('populates the defect summary fields', async () => {
     const defect = await createDefect({ description: 'Door bounces back before closing' });
-    await request(app).post('/api/rectifications').send(baseBody(defect));
+    await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app).get('/api/rectifications');
+    const res = await asUser(admin).get('/api/rectifications');
     expect(res.status).toBe(200);
     expect(res.body.data[0].defectId).toMatchObject({
       defectNo: 'DEF-0001',
@@ -185,10 +211,10 @@ describe('GET /api/rectifications', () => {
     const defectA = await createDefect({ liftId: liftA._id });
     const defectB = await createDefect({ defectNo: 'DEF-0002', liftId: liftB._id });
 
-    const kept = await request(app).post('/api/rectifications').send(baseBody(defectA));
-    await request(app).post('/api/rectifications').send(baseBody(defectB));
+    const kept = await asUser(admin).post('/api/rectifications').send(baseBody(defectA));
+    await asUser(admin).post('/api/rectifications').send(baseBody(defectB));
 
-    const res = await request(app).get('/api/rectifications').query({ liftId: liftA._id.toString() });
+    const res = await asUser(admin).get('/api/rectifications').query({ liftId: liftA._id.toString() });
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
@@ -197,9 +223,9 @@ describe('GET /api/rectifications', () => {
 
   test('liftId filter with no matching lift returns an empty list', async () => {
     const defect = await createDefect();
-    await request(app).post('/api/rectifications').send(baseBody(defect));
+    await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .get('/api/rectifications')
       .query({ liftId: new mongoose.Types.ObjectId().toString() });
 
@@ -210,15 +236,15 @@ describe('GET /api/rectifications', () => {
 
 describe('GET /api/rectifications/:id', () => {
   test('404s on an unknown id', async () => {
-    const res = await request(app).get(`/api/rectifications/${new mongoose.Types.ObjectId()}`);
+    const res = await asUser(admin).get(`/api/rectifications/${new mongoose.Types.ObjectId()}`);
     expect(res.status).toBe(404);
   });
 
   test('returns a fully populated record', async () => {
     const defect = await createDefect();
-    const created = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const created = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app).get(`/api/rectifications/${created.body.data._id}`);
+    const res = await asUser(admin).get(`/api/rectifications/${created.body.data._id}`);
     expect(res.status).toBe(200);
     expect(res.body.data.defectId.title).toBe('Door not closing fully');
   });
@@ -227,9 +253,9 @@ describe('GET /api/rectifications/:id', () => {
 describe('PUT /api/rectifications/:id', () => {
   test('cannot submit without proof', async () => {
     const defect = await createDefect();
-    const created = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const created = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${created.body.data._id}`)
       .send({ status: 'Submitted' });
 
@@ -238,9 +264,9 @@ describe('PUT /api/rectifications/:id', () => {
 
   test('can reach Submitted once proof is attached in the same request', async () => {
     const defect = await createDefect();
-    const created = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const created = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${created.body.data._id}`)
       .send({ proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' });
 
@@ -250,11 +276,11 @@ describe('PUT /api/rectifications/:id', () => {
 
   test('cannot set status directly to Endorsed', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${created.body.data._id}`)
       .send({ status: 'Endorsed' });
 
@@ -264,12 +290,12 @@ describe('PUT /api/rectifications/:id', () => {
 
   test('blocks photo/signature edits once Endorsed', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
-    await request(app).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
+    await asUser(admin).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${created.body.data._id}`)
       .send({ proofPhotos: [PHOTO_URL, 'https://bucket.s3.amazonaws.com/photo-2.jpg'] });
 
@@ -278,12 +304,12 @@ describe('PUT /api/rectifications/:id', () => {
 
   test('still allows remarks once Endorsed', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
-    await request(app).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
+    await asUser(admin).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${created.body.data._id}`)
       .send({ remarks: 'Confirmed working during joint inspection' });
 
@@ -293,7 +319,7 @@ describe('PUT /api/rectifications/:id', () => {
   });
 
   test('404s on an unknown id', async () => {
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/rectifications/${new mongoose.Types.ObjectId()}`)
       .send({ remarks: 'x' });
     expect(res.status).toBe(404);
@@ -303,9 +329,9 @@ describe('PUT /api/rectifications/:id', () => {
 describe('PATCH /api/rectifications/:id/endorse', () => {
   test('cannot endorse a Draft record', async () => {
     const defect = await createDefect();
-    const created = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const created = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff' });
 
@@ -315,21 +341,21 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
 
   test('requires endorsedBy', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({});
+    const res = await asUser(admin).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({});
     expect(res.status).toBe(400);
   });
 
   test('happy path sets status, endorsedBy and endorsedDate', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff' });
 
@@ -344,11 +370,11 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
   // transition rules as defectController.js's updateDefect (see VALID_TRANSITIONS).
   test('advances a linked "In Progress" defect to "Resolved" and sets resolvedDate', async () => {
     const defect = await createDefect({ status: 'In Progress' });
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff' });
     expect(res.status).toBe(200);
@@ -360,11 +386,11 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
 
   test('advances a linked "Open" defect straight to "Closed" (not through Resolved)', async () => {
     const defect = await createDefect({ status: 'Open' });
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff' });
     expect(res.status).toBe(200);
@@ -375,11 +401,11 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
 
   test('leaves an already-"Closed" defect alone and still succeeds (does not throw)', async () => {
     const defect = await createDefect({ status: 'Closed' });
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff' });
     expect(res.status).toBe(200);
@@ -391,12 +417,12 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
 
   test('cannot endorse twice', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
-    await request(app).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
+    await asUser(admin).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .patch(`/api/rectifications/${created.body.data._id}/endorse`)
       .send({ endorsedBy: 'EM Staff Again' });
 
@@ -408,38 +434,38 @@ describe('PATCH /api/rectifications/:id/endorse', () => {
 describe('DELETE /api/rectifications/:id', () => {
   test('cannot delete a Submitted record', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
 
-    const res = await request(app).delete(`/api/rectifications/${created.body.data._id}`);
+    const res = await asUser(admin).delete(`/api/rectifications/${created.body.data._id}`);
     expect(res.status).toBe(400);
   });
 
   test('cannot delete an Endorsed record', async () => {
     const defect = await createDefect();
-    const created = await request(app)
+    const created = await asUser(admin)
       .post('/api/rectifications')
       .send(baseBody(defect, { proofPhotos: [PHOTO_URL], signatureUrl: SIGNATURE_URL, status: 'Submitted' }));
-    await request(app).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
+    await asUser(admin).patch(`/api/rectifications/${created.body.data._id}/endorse`).send({ endorsedBy: 'EM Staff' });
 
-    const res = await request(app).delete(`/api/rectifications/${created.body.data._id}`);
+    const res = await asUser(admin).delete(`/api/rectifications/${created.body.data._id}`);
     expect(res.status).toBe(400);
   });
 
   test('soft-deletes a Draft record', async () => {
     const defect = await createDefect();
-    const created = await request(app).post('/api/rectifications').send(baseBody(defect));
+    const created = await asUser(admin).post('/api/rectifications').send(baseBody(defect));
 
-    const del = await request(app).delete(`/api/rectifications/${created.body.data._id}`);
+    const del = await asUser(admin).delete(`/api/rectifications/${created.body.data._id}`);
     expect(del.status).toBe(200);
 
-    const get = await request(app).get(`/api/rectifications/${created.body.data._id}`);
+    const get = await asUser(admin).get(`/api/rectifications/${created.body.data._id}`);
     expect(get.status).toBe(404);
   });
 
   test('404s on an unknown id', async () => {
-    const res = await request(app).delete(`/api/rectifications/${new mongoose.Types.ObjectId()}`);
+    const res = await asUser(admin).delete(`/api/rectifications/${new mongoose.Types.ObjectId()}`);
     expect(res.status).toBe(404);
   });
 });

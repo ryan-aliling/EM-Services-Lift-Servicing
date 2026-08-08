@@ -8,18 +8,21 @@ const {
   notifyContractor,
   deleteInspection,
 } = require('../../controllers/inspections/inspectionController');
+const { requireAuth, requireRole } = require('../../middleware/auth');
 
-// TODO: re-add requireAuth / requireRole('Admin', 'Manager') on write routes
-// once a login system exists and issues JWTs with a `role` claim (see the
-// matching TODO in backend/src/routes/lifts/liftRoutes.js).
+// Create/edit: any authenticated role, including Staff - but a Staff caller is restricted
+// to a schedule assigned to them (or no schedule link at all), enforced inside
+// createInspection/updateInspection themselves, not here (see inspectionController.js).
+// notify-contractor and delete are formal/destructive EM-staff actions - Admin/Master only;
+// Staff notifies contractors manually outside the app.
 const router = express.Router();
 
-router.get('/', listInspections);
-router.get('/stats', inspectionStats);
-router.get('/:id', getInspection);
-router.post('/', createInspection);
-router.put('/:id', updateInspection);
-router.patch('/:id/notify-contractor', notifyContractor);
-router.delete('/:id', deleteInspection);
+router.get('/', requireAuth, listInspections);
+router.get('/stats', requireAuth, inspectionStats);
+router.get('/:id', requireAuth, getInspection);
+router.post('/', requireAuth, createInspection);
+router.put('/:id', requireAuth, updateInspection);
+router.patch('/:id/notify-contractor', requireAuth, requireRole('Admin', 'Master'), notifyContractor);
+router.delete('/:id', requireAuth, requireRole('Admin', 'Master'), deleteInspection);
 
 module.exports = router;

@@ -1,0 +1,144 @@
+{"phase":"design",
+"prompt":
+"Build real user management and role-based access control for this app,
+replacing the currently-hardcoded dev auth. Three roles: Master, Admin,
+Staff (no Contractor role - out of scope for this pass).
+
+## Role capabilities (final design - implement exactly this, don't
+## reinterpret)
+
+- Master: creates any account (Admin or Staff). Full CRUD on Schedules,
+  Inspections, Defects, Rectifications, plus Endorse.
+- Admin: creates Staff accounts only (cannot create another Admin or a
+  Master). Full CRUD on Schedules (including creating and assigning them to
+  Staff), full CRUD + full visibility on Inspections/Defects/Rectifications
+  across every staff member, plus Endorse.
+- Staff: cannot manage any accounts.
+  - Schedules: read-only, and ONLY schedules assigned to them - EXCEPT they
+    CAN update just the `status` field (Scheduled/Assigned/In
+    Progress/Completed/Cancelled) on their own assigned schedules. They
+    cannot create, delete, or edit any other field (date, lift company,
+    town council, reassignment) on a schedule.
+  - Inspections: can create/edit, but only for a schedule assigned to them
+    (or with no schedule link at all, if that's already allowed).
+  - Defects: can log freely, not restricted to lifts/schedules assigned to
+    them.
+  - Rectifications: can create/submit. Cannot call the endorse endpoint
+    under any circumstance - that's Admin/Master only.
+
+There is no 'Manager' role - retire that label entirely. Every place in the
+current codebase that checks `role === 'Admin' || role === 'Manager'`
+should become a proper 3-role check per the table above, not a straight
+find-and-replace of 'Manager' with 'Admin'.
+
+## Backend
+
+1. New User model (backend/src/models/users/User.js): name, email (unique),
+   passwordHash, role (enum: Master/Admin/Staff), createdBy (ref User, so
+   it's auditable who created each account), isDeleted (soft delete,
+   consistent with every other model in this app - see
+   backend/src/utils/cascadeDelete.js for the pattern), timestamps.
+
+2. Auth: bcrypt for password hashing, JWT for sessions. Endpoints:
+   POST /api/auth/login (email+password -> JWT with role/userId claims),
+   and account management endpoints (create/list/deactivate users) gated by
+   the account-creation rules above (Master creates anyone, Admin creates
+   Staff only, enforced server-side, not just hidden in the UI).
+
+3. Middleware: requireAuth + requireRole(...roles), wired into the routes
+   that already have a standing TODO for this:
+   - backend/src/routes/lifts/liftRoutes.js
+   - backend/src/routes/defects/defectsRoutes.js
+   - backend/src/routes/inspections/inspectionsRoutes.js
+   - backend/src/routes/rectifications/rectificationsRoutes.js (this one's
+     TODO specifically calls out restricting the endorse route further -
+     do that: PATCH /:id/endorse requires Admin or Master specifically, not
+     just 'can edit')
+   - backend/src/routes/scheduling/ currently has NO such TODO/comment at
+     all - add the same auth gating here too, it was apparently missed
+     when the other route files got their TODOs.
+
+4. Schedule model (backend/src/models/scheduling/Schedule.js): add
+   `assignedStaffId` (ObjectId ref User, nullable) as the real relational
+   link - the existing `assignedInspector` free-text field can stay as a
+   display snapshot (same pattern as liftCode/block snapshots elsewhere in
+   this codebase) but must no longer be the source of truth for access
+   control. Write a migration/backfill step (follow the pattern in
+   backend/src/utils/cascadeDelete.js's cleanupOrphans, or add to seed.js)
+   that maps existing `assignedInspector` name strings to real User
+   accounts where possible, and leaves `assignedStaffId: null` where it
+   can't confidently match - don't silently guess wrong.
+
+5. Query scoping: listSchedules (schedulingController.js) must filter to
+   `assignedStaffId: req.user._id` when the caller's role is Staff (Admin/
+   Master see everything, unfiltered by this). updateSchedule must reject
+   any Staff-submitted field other than `status`, and reject entirely if
+   the schedule isn't assigned to that Staff user. createInspection
+   (inspectionController.js) must additionally verify, for a Staff caller,
+   that the referenced scheduleId's assignedStaffId matches their own user
+   id - this extends the existing assertScheduleMatchesLift check, doesn't
+   replace it.
+
+## Frontend
+
+1. Replace frontend/src/context/AuthContext.jsx's hardcoded dev user with
+   a real login flow: a login page, JWT stored (e.g. localStorage) and
+   attached as an Authorization header on every API call, and a logout
+   action.
+
+2. Update every `canEdit = user.role === 'Admin' || user.role ===
+   'Manager'` check (Lifts.jsx, InspectionsStep.jsx, DefectsStep.jsx,
+   RectificationsStep.jsx, SchedulingStep.jsx) to reflect the real 3-role
+   matrix above instead of a flat binary - e.g. SchedulingStep.jsx's 'Add
+   Schedule' button and full-field edit should be Admin/Master only, but
+   Staff still needs a way to update just the status of their own assigned
+   schedules (don't just hide everything behind the same old canEdit flag).
+
+3. EndorseButton.jsx should only render for Admin/Master, per its own
+   existing TODO comment.
+
+4. New account management screen: Master sees and can create
+   Admin+Staff, Admin sees and can create Staff only - enforce this in the
+   UI but rely on the backend enforcement above as the real guard, not this
+   screen.
+
+5. SchedulingStep.jsx / the Lift Workflow's schedule list should filter to
+   'assigned to me' automatically for a Staff-role user (the backend already
+   scopes the query, but make sure the UI doesn't imply they could see more).
+
+## Out of scope for this pass
+No Contractor/lift-company-facing role or portal - that's a separate,
+larger piece of work, not part of this prompt.
+
+## Testing
+Add tests covering: a Staff user cannot create/delete a schedule (403), can
+update only status on their own assigned schedule, cannot touch a schedule
+assigned to someone else, cannot call the endorse endpoint, and an Admin
+cannot create another Admin account (only Master can).",
+"output": "Backend
+New User model (backend/src/models/users/User.js): name/email(unique)/passwordHash/role(Master/Admin/Staff)/createdBy/isDeleted, following the app's existing soft-delete convention.
+Auth infra: utils/jwt.js (sign/verify, 8h expiry), middleware/auth.js (requireAuth re-checks the user isn't deactivated on every request; requireRole(...)), controllers/auth/authController.js + routes/auth/authRoutes.js mounted at /api/auth (login, me, create/list/deactivate users, with Master/Admin account-creation rules enforced server-side).
+server.js now fails fast if JWT_SECRET is unset (verified: exits immediately with a clear message).
+All 5 resource routers (lifts, defects, inspections, rectifications, scheduling) now have requireAuth/requireRole wired in per the matrix — replacing every stale TODO, including scheduling which had none at all.
+Schedule model: added assignedStaffId (real ref, indexed); schedulingController.js converted to the asyncHandler/ApiError pattern and now scopes listSchedules/getSchedule/updateSchedule to Staff ownership (confirmed additions: getSchedule ownership check, 404-not-403 to avoid leaking existence).
+inspectionController.js: new assertScheduleAssignedToStaff, applied to both createInspection and updateInspection (confirmed addition, closes the reassign-after-create loophole).
+backend/scripts/migrateAssignedStaff.js: standalone, idempotent, exact-name-match backfill (kept separate from seed.js deliberately, same reasoning as cleanupOrphans()).
+seed.js: seeds a Master, an Admin, and 4 Staff users whose names match existing assignedInspector strings, wiring assignedStaffId directly.
+Tests: new tests/Auth/ suite (12 cases covering every scenario you asked for) + shared testAuthHelper.js; updated the 4 real existing suites (Aeric/Javier/Elijah/Ryan) to send auth headers.
+Frontend
+Real login (AuthContext.jsx, LoginPage.jsx, AuthGate.jsx), JWT in localStorage, client.js request/response interceptors (401 → clear token + reload, except the login call itself), logout button in the header.
+utils/roles.js (ROLES, isAdminOrMaster) — every 'Manager' string is gone from the codebase; all 5 canEdit sites now express the real 3-way matrix (canCreateOrEdit / canManageFull / and Scheduling's canManageSchedule + canUpdateOwnStatus + isOwnSchedule).
+EndorseButton.jsx now Admin/Master-only.
+New Accounts screen (AccountsPage.jsx, AccountFormDialog.jsx, authApi.js), tab visible only to Admin/Master, with its own defense-in-depth role check.
+Verification
+Backend: 89/91 tests pass. The 2 failures are pre-existing bugs I found but did not introduce or fix (confirmed via git show HEAD) — nextReportNo/nextDefectNo don't filter isDeleted, so the 'reissue number after delete' tests were already broken before this change; out of scope for this RBAC pass, flagging for your awareness.
+Frontend: 73/73 tests pass, npm run build succeeds cleanly.
+Confirmed the server refuses to boot without JWT_SECRET.
+Nothing has been committed — this is all sitting in your working tree on feature/user-management for you to review.
+
+The RBAC implementation is already fully complete and verified — this isn't still at the planning stage. Here's where things actually stand:
+
+The design agent finished a while back; its plan was reviewed, clarified with you via three follow-up questions (Inspection notify-contractor/delete → Admin/Master only, GET /:id ownership check → added, updateInspection reassignment guard → added), written to C:\Users\User\.claude\plans\tender-hugging-blossom.md, and approved.
+Since approval, I implemented the entire plan: backend auth infra (User model, JWT, middleware, auth routes), Schedule/inspection controller scoping, the migration script, seed data, route gating across all 5 resource routers, new and updated test suites, and the full frontend (AuthContext, login flow, role helper, all 5 canEdit sites, EndorseButton, Accounts page).
+Verification is done: backend 89/91 tests passing (2 pre-existing unrelated bugs, not mine), frontend 73/73 passing, production build succeeds, and the JWT_SECRET fail-fast boot check is confirmed.",
+"action":"accepted"}

@@ -5,6 +5,12 @@
 // requiring src/server.js (which connects to Mongo / calls app.listen as a side effect of
 // being required) - same approach as tests/Javier/placeholder.test.js and
 // tests/Aeric/placeholder.test.js.
+//
+// defectsRoutes now requires an authenticated caller on every route (RBAC pass) - every
+// request below runs as an Admin user via asUser(), which has unrestricted access including
+// delete, matching this suite's original (pre-RBAC) behavior.
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+
 const request = require('supertest');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -12,6 +18,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const defectsRoutes = require('../../src/routes/defects/defectsRoutes');
 const Lift = require('../../src/models/lifts/Lift');
+const { createTestUser, authHeader } = require('../testAuthHelper');
 
 function buildTestApp() {
   const app = express();
@@ -23,6 +30,16 @@ function buildTestApp() {
     res.status(err.statusCode || 500).json({ success: false, message: err.message || 'Internal server error' });
   });
   return app;
+}
+
+function asUser(user) {
+  const header = authHeader(user);
+  return {
+    get: (url) => request(app).get(url).set('Authorization', header),
+    post: (url) => request(app).post(url).set('Authorization', header),
+    put: (url) => request(app).put(url).set('Authorization', header),
+    delete: (url) => request(app).delete(url).set('Authorization', header),
+  };
 }
 
 async function createTestLift(overrides = {}) {
@@ -45,11 +62,16 @@ const basePayload = (overrides = {}) => ({
 
 let mongod;
 let app;
+let admin;
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
   app = buildTestApp();
+});
+
+beforeEach(async () => {
+  admin = await createTestUser('Admin');
 });
 
 afterEach(async () => {
@@ -64,7 +86,7 @@ afterAll(async () => {
 
 describe('POST /api/defects', () => {
   test('creates a defect with the first defect number and default Open status', async () => {
-    const res = await request(app).post('/api/defects').send(basePayload());
+    const res = await asUser(admin).post('/api/defects').send(basePayload());
 
     expect(res.status).toBe(201);
     expect(res.body.data.defectNo).toBe('DEF-0001');
@@ -74,7 +96,7 @@ describe('POST /api/defects', () => {
   });
 
   test('rejects a payload missing required fields', async () => {
-    const res = await request(app).post('/api/defects').send({ title: 'No location or severity' });
+    const res = await asUser(admin).post('/api/defects').send({ title: 'No location or severity' });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
@@ -82,14 +104,14 @@ describe('POST /api/defects', () => {
   });
 
   test('rejects an invalid severity value', async () => {
-    const res = await request(app).post('/api/defects').send(basePayload({ severity: 'Super Bad' }));
+    const res = await asUser(admin).post('/api/defects').send(basePayload({ severity: 'Super Bad' }));
 
     expect(res.status).toBe(500); // Mongoose enum validation surfaces as a 500 via the shared error handler
   });
 
   test('snapshots liftCode when a valid liftId is supplied', async () => {
     const lift = await createTestLift();
-    const res = await request(app).post('/api/defects').send(basePayload({ liftId: lift._id.toString() }));
+    const res = await asUser(admin).post('/api/defects').send(basePayload({ liftId: lift._id.toString() }));
 
     expect(res.status).toBe(201);
     expect(res.body.data.liftCode).toBe('L-TEST-1');
@@ -97,7 +119,7 @@ describe('POST /api/defects', () => {
 
   test('rejects a liftId that does not resolve to a real lift', async () => {
     const fakeId = new mongoose.Types.ObjectId();
-    const res = await request(app).post('/api/defects').send(basePayload({ liftId: fakeId.toString() }));
+    const res = await asUser(admin).post('/api/defects').send(basePayload({ liftId: fakeId.toString() }));
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/lift not found/i);
@@ -106,25 +128,25 @@ describe('POST /api/defects', () => {
 
 describe('defect number reuse after delete', () => {
   test('reissues the highest deleted number instead of skipping ahead', async () => {
-    const first = await request(app).post('/api/defects').send(basePayload());
-    const second = await request(app).post('/api/defects').send(basePayload());
+    const first = await asUser(admin).post('/api/defects').send(basePayload());
+    const second = await asUser(admin).post('/api/defects').send(basePayload());
     expect(first.body.data.defectNo).toBe('DEF-0001');
     expect(second.body.data.defectNo).toBe('DEF-0002');
 
-    const del = await request(app).delete(`/api/defects/${second.body.data._id}`);
+    const del = await asUser(admin).delete(`/api/defects/${second.body.data._id}`);
     expect(del.status).toBe(200);
 
-    const third = await request(app).post('/api/defects').send(basePayload());
+    const third = await asUser(admin).post('/api/defects').send(basePayload());
     expect(third.body.data.defectNo).toBe('DEF-0002');
   });
 });
 
 describe('PUT /api/defects/:id - full edit', () => {
   test('allows correcting any field regardless of current status', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
-    await request(app).put(`/api/defects/${created.body.data._id}`).send({ status: 'In Progress' });
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
+    await asUser(admin).put(`/api/defects/${created.body.data._id}`).send({ status: 'In Progress' });
 
-    const res = await request(app)
+    const res = await asUser(admin)
       .put(`/api/defects/${created.body.data._id}`)
       .send({ title: 'Corrected: door sensor misaligned', location: 'Blk 12A lobby', severity: 'Critical' });
 
@@ -136,8 +158,8 @@ describe('PUT /api/defects/:id - full edit', () => {
   });
 
   test('rejects clearing the title to an empty string', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
-    const res = await request(app).put(`/api/defects/${created.body.data._id}`).send({ title: '   ' });
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
+    const res = await asUser(admin).put(`/api/defects/${created.body.data._id}`).send({ title: '   ' });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/title/i);
@@ -145,43 +167,43 @@ describe('PUT /api/defects/:id - full edit', () => {
 
   test('returns 404 when editing an unknown id', async () => {
     const unknownId = new mongoose.Types.ObjectId();
-    const res = await request(app).put(`/api/defects/${unknownId}`).send({ title: 'Anything' });
+    const res = await asUser(admin).put(`/api/defects/${unknownId}`).send({ title: 'Anything' });
     expect(res.status).toBe(404);
   });
 });
 
 describe('status transitions', () => {
   test('allows the normal forward path Open -> In Progress -> Resolved -> Closed', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
     const id = created.body.data._id;
 
-    const toInProgress = await request(app).put(`/api/defects/${id}`).send({ status: 'In Progress' });
+    const toInProgress = await asUser(admin).put(`/api/defects/${id}`).send({ status: 'In Progress' });
     expect(toInProgress.status).toBe(200);
 
-    const toResolved = await request(app).put(`/api/defects/${id}`).send({ status: 'Resolved' });
+    const toResolved = await asUser(admin).put(`/api/defects/${id}`).send({ status: 'Resolved' });
     expect(toResolved.status).toBe(200);
     expect(toResolved.body.data.resolvedDate).not.toBeNull();
 
-    const toClosed = await request(app).put(`/api/defects/${id}`).send({ status: 'Closed' });
+    const toClosed = await asUser(admin).put(`/api/defects/${id}`).send({ status: 'Closed' });
     expect(toClosed.status).toBe(200);
   });
 
   test('blocks skipping straight from Open to Resolved', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
-    const res = await request(app).put(`/api/defects/${created.body.data._id}`).send({ status: 'Resolved' });
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
+    const res = await asUser(admin).put(`/api/defects/${created.body.data._id}`).send({ status: 'Resolved' });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/cannot change status/i);
   });
 
   test('allows reopening a Closed defect back to Open', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
     const id = created.body.data._id;
-    await request(app).put(`/api/defects/${id}`).send({ status: 'In Progress' });
-    await request(app).put(`/api/defects/${id}`).send({ status: 'Resolved' });
-    await request(app).put(`/api/defects/${id}`).send({ status: 'Closed' });
+    await asUser(admin).put(`/api/defects/${id}`).send({ status: 'In Progress' });
+    await asUser(admin).put(`/api/defects/${id}`).send({ status: 'Resolved' });
+    await asUser(admin).put(`/api/defects/${id}`).send({ status: 'Closed' });
 
-    const res = await request(app).put(`/api/defects/${id}`).send({ status: 'Open' });
+    const res = await asUser(admin).put(`/api/defects/${id}`).send({ status: 'Open' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('Open');
   });
@@ -189,36 +211,36 @@ describe('status transitions', () => {
 
 describe('DELETE /api/defects/:id', () => {
   test('deletes an existing defect', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
-    const res = await request(app).delete(`/api/defects/${created.body.data._id}`);
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
+    const res = await asUser(admin).delete(`/api/defects/${created.body.data._id}`);
     expect(res.status).toBe(200);
 
-    const getRes = await request(app).get(`/api/defects/${created.body.data._id}`);
+    const getRes = await asUser(admin).get(`/api/defects/${created.body.data._id}`);
     expect(getRes.status).toBe(404);
   });
 
   test('returns 404 when deleting an unknown id', async () => {
     const unknownId = new mongoose.Types.ObjectId();
-    const res = await request(app).delete(`/api/defects/${unknownId}`);
+    const res = await asUser(admin).delete(`/api/defects/${unknownId}`);
     expect(res.status).toBe(404);
   });
 });
 
 describe('GET /api/defects', () => {
   test('filters by a comma-separated status list (multi-select filter)', async () => {
-    const first = await request(app).post('/api/defects').send(basePayload());
-    await request(app).post('/api/defects').send(basePayload());
-    await request(app).put(`/api/defects/${first.body.data._id}`).send({ status: 'In Progress' });
+    const first = await asUser(admin).post('/api/defects').send(basePayload());
+    await asUser(admin).post('/api/defects').send(basePayload());
+    await asUser(admin).put(`/api/defects/${first.body.data._id}`).send({ status: 'In Progress' });
 
-    const res = await request(app).get('/api/defects').query({ status: 'Open,In Progress' });
+    const res = await asUser(admin).get('/api/defects').query({ status: 'Open,In Progress' });
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
   });
 
   test('searches by defect number', async () => {
-    const created = await request(app).post('/api/defects').send(basePayload());
-    const res = await request(app).get('/api/defects').query({ q: created.body.data.defectNo });
+    const created = await asUser(admin).post('/api/defects').send(basePayload());
+    const res = await asUser(admin).get('/api/defects').query({ q: created.body.data.defectNo });
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
@@ -228,10 +250,10 @@ describe('GET /api/defects', () => {
   test('filters by liftId - only returns that lift\'s defects, not other lifts\'', async () => {
     const liftA = await createTestLift();
     const liftB = await createTestLift({ liftCode: 'L-TEST-2' });
-    await request(app).post('/api/defects').send(basePayload({ liftId: liftA._id.toString() }));
-    await request(app).post('/api/defects').send(basePayload({ liftId: liftB._id.toString() }));
+    await asUser(admin).post('/api/defects').send(basePayload({ liftId: liftA._id.toString() }));
+    await asUser(admin).post('/api/defects').send(basePayload({ liftId: liftB._id.toString() }));
 
-    const res = await request(app).get('/api/defects').query({ liftId: liftA._id.toString() });
+    const res = await asUser(admin).get('/api/defects').query({ liftId: liftA._id.toString() });
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
@@ -241,11 +263,11 @@ describe('GET /api/defects', () => {
 
 describe('GET /api/defects/stats', () => {
   test('counts defects by status and flags open critical defects', async () => {
-    const critical = await request(app).post('/api/defects').send(basePayload({ severity: 'Critical' }));
-    await request(app).post('/api/defects').send(basePayload());
-    await request(app).put(`/api/defects/${critical.body.data._id}`).send({ status: 'In Progress' });
+    const critical = await asUser(admin).post('/api/defects').send(basePayload({ severity: 'Critical' }));
+    await asUser(admin).post('/api/defects').send(basePayload());
+    await asUser(admin).put(`/api/defects/${critical.body.data._id}`).send({ status: 'In Progress' });
 
-    const res = await request(app).get('/api/defects/stats');
+    const res = await asUser(admin).get('/api/defects/stats');
 
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(2);

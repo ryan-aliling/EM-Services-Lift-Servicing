@@ -14,6 +14,7 @@ import * as defectApi from '../../../api/defectApi';
 import { formatDate } from '../../../utils/formatDate';
 import { RECTIFICATION_STATUS_COLORS, DEFECT_STATUS_COLORS } from '../../../theme/statusColors';
 import { useAuth } from '../../../context/AuthContext';
+import { isAdminOrMaster } from '../../../utils/roles';
 
 // Step 4 of the Lift Workflow - same CRUD/API as the standalone Rectifications page
 // (rectificationApi via useRectifications, RectificationForm) scoped down to this lift.
@@ -23,7 +24,10 @@ import { useAuth } from '../../../context/AuthContext';
 export default function RectificationsStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
-  const canEdit = user.role === 'Admin' || user.role === 'Manager';
+  // Create/submit is open to all 3 roles. Delete is Admin/Master only - Endorse is gated
+  // separately inside EndorseButton.jsx itself, not here.
+  const canCreateOrEdit = true;
+  const canManageFull = isAdminOrMaster(user.role);
 
   const { rectifications, loading, create, update, endorse, remove } = useRectifications();
 
@@ -148,11 +152,11 @@ export default function RectificationsStep({ lift }) {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: canEdit ? 60 : 20,
+      width: canManageFull ? 60 : 20,
       sortable: false,
       filterable: false,
       renderCell: (params) =>
-        canEdit && params.row.status === 'Draft' ? (
+        canManageFull && params.row.status === 'Draft' ? (
           <IconButton
             size="small"
             title="Delete rectification"
@@ -171,7 +175,7 @@ export default function RectificationsStep({ lift }) {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6">Rectifications — {lift.liftCode}</Typography>
-        {canEdit && (
+        {canCreateOrEdit && (
           <Button startIcon={<AddIcon />} variant="contained" onClick={() => openCreate()}>
             New Rectification
           </Button>
@@ -198,7 +202,7 @@ export default function RectificationsStep({ lift }) {
                   </Typography>
                   <StatusChip value={d.status} colorMap={DEFECT_STATUS_COLORS} />
                 </Stack>
-                {canEdit && (
+                {canCreateOrEdit && (
                   <Button
                     size="small"
                     startIcon={<BuildOutlinedIcon fontSize="small" />}

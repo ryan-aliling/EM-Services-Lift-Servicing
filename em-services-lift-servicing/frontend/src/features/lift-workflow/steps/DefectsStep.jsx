@@ -17,6 +17,7 @@ import { exportToCSV } from '../../../utils/csvExport';
 import { DEFECT_CSV_COLUMNS } from '../../defects/defectCsvColumns';
 import { DEFECT_STATUS_COLORS, DEFECT_SEVERITY_COLORS } from '../../../theme/statusColors';
 import { useAuth } from '../../../context/AuthContext';
+import { isAdminOrMaster } from '../../../utils/roles';
 
 // Step 3 of the Lift Workflow - same CRUD/API as the standalone Defects page, scoped down
 // to defects linked to the currently selected lift. A fresh defect logged here already
@@ -24,7 +25,10 @@ import { useAuth } from '../../../context/AuthContext';
 export default function DefectsStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
-  const canEdit = user.role === 'Admin' || user.role === 'Manager';
+  // Defects can be logged/edited freely by any role, including Staff (not restricted to
+  // lifts/schedules assigned to them). Delete is Admin/Master only.
+  const canCreateOrEdit = true;
+  const canManageFull = isAdminOrMaster(user.role);
 
   const [defects, setDefects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,12 +128,12 @@ export default function DefectsStep({ lift }) {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: canEdit ? 100 : 40,
+      width: canManageFull ? 100 : canCreateOrEdit ? 60 : 40,
       sortable: false,
       filterable: false,
-      renderCell: (params) =>
-        canEdit ? (
-          <Stack direction="row">
+      renderCell: (params) => (
+        <Stack direction="row">
+          {canCreateOrEdit && (
             <IconButton
               size="small"
               title="Edit defect"
@@ -140,11 +144,14 @@ export default function DefectsStep({ lift }) {
             >
               <EditIcon fontSize="small" />
             </IconButton>
+          )}
+          {canManageFull && (
             <IconButton size="small" title="Delete defect" onClick={() => setDeleteTarget(params.row)}>
               <DeleteIcon fontSize="small" />
             </IconButton>
-          </Stack>
-        ) : null,
+          )}
+        </Stack>
+      ),
     },
   ];
 
@@ -156,7 +163,7 @@ export default function DefectsStep({ lift }) {
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
           </Button>
-          {canEdit && (
+          {canCreateOrEdit && (
             <Button
               startIcon={<AddIcon />}
               variant="contained"

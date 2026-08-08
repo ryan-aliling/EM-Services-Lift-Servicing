@@ -3,6 +3,7 @@ import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
 import Lifts from './features/lifts/Lifts';
 import LiftWorkflowPage from './features/lift-workflow/LiftWorkflowPage';
 import DashboardPage from './features/dashboard/DashboardPage';
+import AccountsPage from './features/accounts/AccountsPage';
 
 // Each feature owner mounts their page component here under their tab id.
 // Tabs without an entry yet fall back to the "coming soon" placeholder.
@@ -16,6 +17,7 @@ const FEATURE_PAGES = {
   dashboard: DashboardPage,
   lifts: Lifts,
   'lift-workflow': LiftWorkflowPage,
+  accounts: AccountsPage,
 };
 
 export default function Workspace({ tabs, activeTab }) {
