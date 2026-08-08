@@ -1,14 +1,46 @@
 require('dotenv').config();
 
+const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const Schedule = require('./src/models/scheduling/Schedule');
 const Lift = require('./src/models/lifts/Lift');
 const Inspection = require('./src/models/inspections/Inspection');
 const Defect = require('./src/models/defects/Defect');
 const Rectification = require('./src/models/rectifications/Rectification');
+const User = require('./src/models/users/User');
 
 // TODO: each person adds their own seed data here for their feature's models,
 // e.g. connect to DATABASE_URL and insert sample lifts/schedules/inspections/etc.
+
+// Staff names deliberately match the `assignedInspector` strings already used in
+// buildSampleSchedules() below, so that function can set the real `assignedStaffId` link
+// directly via a name lookup - guaranteed 1:1 matches since both are authored together
+// (see backend/scripts/migrateAssignedStaff.js for the equivalent best-effort match against
+// pre-existing data that wasn't seeded this way).
+const SAMPLE_USERS = [
+  { name: 'Master Admin', email: 'master@emservices.test', password: 'Passw0rd!', role: 'Master' },
+  { name: 'Alice Tan', email: 'alice.admin@emservices.test', password: 'Passw0rd!', role: 'Admin' },
+  { name: 'Jessica S.', email: 'jessica.s@emservices.test', password: 'Passw0rd!', role: 'Staff' },
+  { name: 'Marcus T.', email: 'marcus.t@emservices.test', password: 'Passw0rd!', role: 'Staff' },
+  { name: 'Jane Lim', email: 'jane.lim@emservices.test', password: 'Passw0rd!', role: 'Staff' },
+  { name: 'John Tan', email: 'john.tan@emservices.test', password: 'Passw0rd!', role: 'Staff' },
+];
+
+async function seedUsers() {
+  await User.deleteMany({});
+  const docs = await Promise.all(
+    SAMPLE_USERS.map(async (u) => ({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      passwordHash: await bcrypt.hash(u.password, 10),
+    }))
+  );
+  const users = await User.insertMany(docs);
+  console.log(`Seeded ${users.length} users. Local dev logins (plaintext, dev-only):`);
+  SAMPLE_USERS.forEach((u) => console.log(`  ${u.role.padEnd(6)} ${u.email} / ${u.password}`));
+  return users;
+}
 
 const sampleLifts = [
   { liftCode: 'L-102', block: 'Blk 201 Tampines St 21', unit: '#B1-01', type: 'Passenger', capacity: 13, status: 'Active', manufacturer: 'KONE', installDate: new Date('2014-03-15'), lastServiced: new Date('2026-07-08') },
@@ -56,15 +88,22 @@ const LIFT_COMPANY_BY_MANUFACTURER = {
 // `liftCompany` line up with an actual lift, and the two Completed entries below land the
 // day before the matching inspection's `inspectionDate` in seedInspections() - mirroring
 // the real workflow (spot-check -> next-day inspection). Covers every Schedule status.
-function buildSampleSchedules(lifts) {
+// `users` (from seedUsers()) is optional so this still works if called standalone without
+// users seeded first - assignedStaffId is simply left null in that case.
+function buildSampleSchedules(lifts, users = []) {
   const byCode = Object.fromEntries(lifts.map((lift) => [lift.liftCode, lift]));
+  const byStaffName = Object.fromEntries(
+    users.filter((u) => u.role === 'Staff').map((u) => [u.name, u])
+  );
   const forLift = (code, overrides) => {
     const lift = byCode[code];
+    const staff = overrides.assignedInspector ? byStaffName[overrides.assignedInspector] : null;
     return {
       townCouncil: TOWN_COUNCIL_BY_BLOCK[lift.block],
       liftCompany: LIFT_COMPANY_BY_MANUFACTURER[lift.manufacturer],
       blockAddress: lift.block,
       liftId: lift._id,
+      assignedStaffId: staff ? staff._id : null,
       ...overrides,
     };
   };
@@ -135,8 +174,8 @@ function buildSampleSchedules(lifts) {
   ];
 }
 
-async function seedScheduling(lifts) {
-  const sampleSchedules = buildSampleSchedules(lifts);
+async function seedScheduling(lifts, users = []) {
+  const sampleSchedules = buildSampleSchedules(lifts, users);
   await Schedule.deleteMany({});
   const schedules = await Schedule.insertMany(sampleSchedules);
   console.log(`Seeded ${schedules.length} schedules`);
@@ -373,8 +412,9 @@ if (require.main === module) {
   mongoose
     .connect(process.env.DATABASE_URL)
     .then(async () => {
+      const users = await seedUsers();
       const lifts = await seedLifts();
-      await seedScheduling(lifts);
+      await seedScheduling(lifts, users);
       const inspections = await seedInspections(lifts);
       await seedDefectsAndRectifications(inspections);
 
@@ -391,4 +431,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { seedLifts, seedScheduling, seedInspections, seedDefectsAndRectifications };
+module.exports = { seedUsers, seedLifts, seedScheduling, seedInspections, seedDefectsAndRectifications };

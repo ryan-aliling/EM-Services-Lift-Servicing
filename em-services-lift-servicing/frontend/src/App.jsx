@@ -4,21 +4,30 @@ import { AppBar, Avatar, Box, IconButton, Stack, Toolbar, Tooltip, Typography } 
 import ElevatorOutlinedIcon from '@mui/icons-material/ElevatorOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import TabBar from './TabBar';
 import Workspace from './Workspace';
 import NotificationBell from './components/NotificationBell';
 import { useThemeMode } from './context/ThemeModeContext';
 import { useAuth } from './context/AuthContext';
+import { isAdminOrMaster } from './utils/roles';
 
 // Scheduling, Inspections, Defects and Rectifications used to be four separate tabs.
 // They're now one guided "Lift Workflow" tab (see features/lift-workflow/LiftWorkflowPage.jsx) -
 // search/select a lift, then step through all four in sequence. The four modules' CRUD/API
 // stay fully separate; only the navigation/UX is combined.
-export const TABS = [
+const BASE_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'lifts', label: 'Lifts' },
   { id: 'lift-workflow', label: 'Lift Workflow' },
 ];
+
+// Accounts tab only exists for Master/Admin - Staff never sees or can navigate to it (see
+// AccountsPage.jsx's own role check for defense in depth if a Staff user tries the URL
+// directly, but the backend is the real guard either way).
+export function getTabs(role) {
+  return isAdminOrMaster(role) ? [...BASE_TABS, { id: 'accounts', label: 'Accounts' }] : BASE_TABS;
+}
 
 function initials(name = '') {
   return name
@@ -34,14 +43,15 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { mode, toggleMode } = useThemeMode();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const tabs = getTabs(user.role);
 
   // The active tab is derived from the URL (e.g. /lifts) so dialogs elsewhere in the app
   // can deep-link into a tab with navigate('/scheduling') etc.
-  const activeTab = location.pathname.replace('/', '') || TABS[0].id;
+  const activeTab = location.pathname.replace('/', '') || tabs[0].id;
 
   useEffect(() => {
-    if (location.pathname === '/') navigate(`/${TABS[0].id}`, { replace: true });
+    if (location.pathname === '/') navigate(`/${tabs[0].id}`, { replace: true });
   }, [location.pathname, navigate]);
 
   return (
@@ -73,13 +83,18 @@ export default function App() {
                 {user.role}
               </Typography>
             </Box>
+            <Tooltip title="Log out">
+              <IconButton onClick={logout} color="inherit" aria-label="Log out">
+                <LogoutOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Stack>
         </Toolbar>
 
-        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={(id) => navigate(`/${id}`)} />
+        <TabBar tabs={tabs} activeTab={activeTab} onTabChange={(id) => navigate(`/${id}`)} />
       </AppBar>
 
-      <Workspace tabs={TABS} activeTab={activeTab} />
+      <Workspace tabs={tabs} activeTab={activeTab} />
     </Box>
   );
 }

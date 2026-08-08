@@ -44,6 +44,7 @@ import { formatDate } from '../../../utils/formatDate';
 import { exportToCSV } from '../../../utils/csvExport';
 import { INSPECTION_STATUS_COLORS, DEFECT_COMPLIANCE_COLORS, DEFECT_SEVERITY_COLORS } from '../../../theme/statusColors';
 import { useAuth } from '../../../context/AuthContext';
+import { isAdminOrMaster } from '../../../utils/roles';
 import { canEditReport, canDeleteReport } from '../../inspections/inspectionHelpers';
 
 const STATUS_OPTIONS = ['Draft', 'Submitted', 'Under Review', 'Closed'];
@@ -54,7 +55,10 @@ const STATUS_OPTIONS = ['Draft', 'Submitted', 'Under Review', 'Closed'];
 export default function InspectionsStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
-  const canEdit = user.role === 'Admin' || user.role === 'Manager';
+  // Create/edit is open to all 3 roles - the backend scopes a Staff caller to a schedule
+  // assigned to them (or no schedule link at all). Delete is Admin/Master only.
+  const canCreateOrEdit = true;
+  const canManageFull = isAdminOrMaster(user.role);
 
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -154,7 +158,7 @@ export default function InspectionsStep({ lift }) {
       <InspectionDetailView
         report={viewingReport}
         onBack={() => setViewingReport(null)}
-        onEdit={canEdit ? () => { setViewingReport(null); openEdit(viewingReport); } : null}
+        onEdit={canCreateOrEdit ? () => { setViewingReport(null); openEdit(viewingReport); } : null}
       />
     );
   }
@@ -211,7 +215,7 @@ export default function InspectionsStep({ lift }) {
             <Tooltip title="Export the reports currently shown to CSV">
               <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExport}>Export</Button>
             </Tooltip>
-            {canEdit && <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Inspection Report</Button>}
+            {canCreateOrEdit && <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Inspection Report</Button>}
           </Box>
         </Box>
 
@@ -239,15 +243,15 @@ export default function InspectionsStep({ lift }) {
                     <TableCell><StatusChip value={r.overallStatus} colorMap={INSPECTION_STATUS_COLORS} /></TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       <Tooltip title="View report"><IconButton size="small" onClick={() => openView(r)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                      {canEdit && (
-                        <>
-                          <Tooltip title={isDraft ? 'Edit findings' : 'Submitted reports are locked and cannot be edited'}>
-                            <span><IconButton size="small" disabled={!isDraft} onClick={() => openEdit(r)}><EditIcon fontSize="small" /></IconButton></span>
-                          </Tooltip>
-                          <Tooltip title={isDraft ? 'Delete draft report' : 'Only draft reports can be deleted'}>
-                            <span><IconButton size="small" color="error" disabled={!deletable} onClick={() => setDeleteTarget(r)}><DeleteIcon fontSize="small" /></IconButton></span>
-                          </Tooltip>
-                        </>
+                      {canCreateOrEdit && (
+                        <Tooltip title={isDraft ? 'Edit findings' : 'Submitted reports are locked and cannot be edited'}>
+                          <span><IconButton size="small" disabled={!isDraft} onClick={() => openEdit(r)}><EditIcon fontSize="small" /></IconButton></span>
+                        </Tooltip>
+                      )}
+                      {canManageFull && (
+                        <Tooltip title={isDraft ? 'Delete draft report' : 'Only draft reports can be deleted'}>
+                          <span><IconButton size="small" color="error" disabled={!deletable} onClick={() => setDeleteTarget(r)}><DeleteIcon fontSize="small" /></IconButton></span>
+                        </Tooltip>
                       )}
                     </TableCell>
                   </TableRow>

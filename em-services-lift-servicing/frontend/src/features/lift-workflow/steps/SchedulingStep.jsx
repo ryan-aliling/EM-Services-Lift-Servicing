@@ -20,6 +20,7 @@ import { exportToCSV } from '../../../utils/csvExport';
 import { SCHEDULE_CSV_COLUMNS } from '../../scheduling/scheduleCsvColumns';
 import { SCHEDULE_STATUS_COLORS } from '../../../theme/statusColors';
 import { useAuth } from '../../../context/AuthContext';
+import { ROLES, isAdminOrMaster } from '../../../utils/roles';
 
 // Step 1 of the Lift Workflow - same CRUD/API as the standalone Scheduling page (Student
 // owner's scheduleApi + ScheduleFormDialog are reused untouched), just scoped down to
@@ -27,7 +28,14 @@ import { useAuth } from '../../../context/AuthContext';
 export default function SchedulingStep({ lift }) {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
-  const canEdit = user.role === 'Admin' || user.role === 'Manager';
+  // Admin/Master: full CRUD (Add Schedule, full-field Edit, Delete). Staff: read-only,
+  // except they can advance the status on their own assigned schedule - a separate, narrower
+  // affordance from canManageSchedule, not the same flag reused. The backend already scopes
+  // fetchSchedules() to "assigned to me" for a Staff caller (see schedulingController.js),
+  // so there's no client-side filter to add here - only these action gates.
+  const canManageSchedule = isAdminOrMaster(user.role);
+  const canUpdateOwnStatus = user.role === ROLES.STAFF;
+  const isOwnSchedule = (row) => String(row.assignedStaffId) === String(user.id);
 
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +151,7 @@ export default function SchedulingStep({ lift }) {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: canEdit ? 190 : 70,
+      width: canManageSchedule ? 190 : 70,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
@@ -151,15 +159,15 @@ export default function SchedulingStep({ lift }) {
           <IconButton size="small" onClick={() => setViewingSchedule(params.row)} title="View details">
             <VisibilityIcon fontSize="small" />
           </IconButton>
-          {canEdit && (
+          {(canManageSchedule || (canUpdateOwnStatus && isOwnSchedule(params.row))) && NEXT_STATUS[params.row.status] && (
+            <Tooltip title={`Mark ${NEXT_STATUS[params.row.status]}`}>
+              <IconButton size="small" onClick={() => handleAdvanceStatus(params.row)}>
+                <ArrowForwardIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {canManageSchedule && (
             <>
-              {NEXT_STATUS[params.row.status] && (
-                <Tooltip title={`Mark ${NEXT_STATUS[params.row.status]}`}>
-                  <IconButton size="small" onClick={() => handleAdvanceStatus(params.row)}>
-                    <ArrowForwardIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
               <IconButton
                 size="small"
                 onClick={() => {
@@ -187,7 +195,7 @@ export default function SchedulingStep({ lift }) {
           <Button startIcon={<DownloadIcon />} variant="outlined" onClick={handleExport}>
             Export CSV
           </Button>
-          {canEdit && (
+          {canManageSchedule && (
             <Button
               startIcon={<AddIcon />}
               variant="contained"

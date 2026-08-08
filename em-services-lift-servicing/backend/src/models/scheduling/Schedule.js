@@ -18,6 +18,12 @@ const scheduleSchema = new mongoose.Schema(
     scheduledDate: { type: Date, required: true },
     assignedInspector: { type: String, trim: true, default: '' },
 
+    // The real relational link used for access control (a Staff user only sees/updates
+    // schedules where this matches their own id) - assignedInspector above stays as a
+    // free-text display snapshot only, same pattern as liftCode/block snapshots elsewhere
+    // in this codebase, and is no longer read for authorization decisions.
+    assignedStaffId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
     status: {
       type: String,
       enum: STATUS_VALUES,
@@ -34,6 +40,7 @@ const scheduleSchema = new mongoose.Schema(
 
 scheduleSchema.index({ scheduledDate: 1 });
 scheduleSchema.index({ status: 1 });
+scheduleSchema.index({ assignedStaffId: 1 });
 
 const Schedule = mongoose.model('Schedule', scheduleSchema);
 Schedule.STATUS_VALUES = STATUS_VALUES;

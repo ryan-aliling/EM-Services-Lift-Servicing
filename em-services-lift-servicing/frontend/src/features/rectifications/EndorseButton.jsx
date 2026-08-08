@@ -2,21 +2,25 @@ import { useState } from 'react';
 import { useSnackbar } from 'notistack';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
+import { useAuth } from '../../context/AuthContext';
+import { isAdminOrMaster } from '../../utils/roles';
 
 /**
  * EM staff's endorsement action on a Submitted rectification, after the joint on-site
- * inspection confirms the fix. Only ever rendered for a "Submitted" record - once
- * auth/roles exist this should also be gated to an EM-staff role (see the TODO on
- * rectificationsRoutes.js), but for now it's visible to everyone like the rest of the
- * app's write actions (see AuthContext.jsx's own TODO).
+ * inspection confirms the fix. Only ever rendered for a "Submitted" record, and now gated
+ * to Admin/Master (the backend's PATCH /:id/endorse rejects a Staff caller regardless -
+ * see requireRole('Admin','Master') on rectificationsRoutes.js - but this keeps the button
+ * from even appearing for a role that can never use it).
  */
 export default function EndorseButton({ rectification, onEndorse }) {
+  const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const [open, setOpen] = useState(false);
   const [endorsedBy, setEndorsedBy] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (rectification.status !== 'Submitted') return null;
+  if (!isAdminOrMaster(user.role)) return null;
 
   async function handleConfirm() {
     if (!endorsedBy.trim()) return;

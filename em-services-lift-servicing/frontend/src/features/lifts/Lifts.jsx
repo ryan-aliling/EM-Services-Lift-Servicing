@@ -38,6 +38,7 @@ import { exportToCSV } from '../../utils/csvExport';
 import { parseCSV, rowsToLiftPayloads } from '../../utils/csvImport';
 import { LIFT_STATUS_COLORS } from '../../theme/statusColors';
 import { useAuth } from '../../context/AuthContext';
+import { isAdminOrMaster } from '../../utils/roles';
 
 const IMPORT_TEMPLATE_COLUMNS = [
   { label: 'Lift Code', value: (l) => l.liftCode },
@@ -54,7 +55,9 @@ const IMPORT_TEMPLATE_COLUMNS = [
 export default function Lifts() {
   const { user } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
-  const canEdit = user.role === 'Admin' || user.role === 'Manager';
+  // Lift management (create/edit/delete/import) is Admin/Master only - the role matrix
+  // grants Staff no access here at all.
+  const canEdit = isAdminOrMaster(user.role);
 
   const [lifts, setLifts] = useState([]);
   const [stats, setStats] = useState(null);
