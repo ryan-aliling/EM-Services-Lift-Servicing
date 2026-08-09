@@ -1,12 +1,14 @@
 const express = require('express');
 const cloudinary = require('../utils/cloudinary');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Signed-upload flow: the frontend never sees CLOUDINARY_API_SECRET - it only gets a
 // short-lived signature computed with it, then uploads the file bytes straight to
 // Cloudinary itself (see useFileUpload.js), so file bytes never pass through our server.
-router.post('/signature', (req, res) => {
+// requireAuth so an anonymous caller can't mint upload signatures for our Cloudinary account.
+router.post('/signature', requireAuth, (req, res) => {
   const { folder } = req.body || {};
 
   if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {

@@ -6,7 +6,7 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 
 /**
  * Multiple-file photo picker for rectification proof photos. Each selected file goes
- * through the shared useFileUpload hook (presign -> PUT to S3) one at a time - reusing
+ * through the shared useFileUpload hook (sign -> upload to Cloudinary) one at a time - reusing
  * the exact same upload path the brief calls for, rather than a separate one for this
  * feature. Files upload sequentially (not in parallel) so the single uploading/progress
  * pair the hook exposes always reflects the file currently in flight.

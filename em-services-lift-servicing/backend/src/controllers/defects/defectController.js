@@ -117,15 +117,23 @@ const createDefect = asyncHandler(async (req, res) => {
   const liftId = req.body.liftId || inspection?.liftId || null;
   const { liftCode } = await resolveLiftSnapshot(liftId);
 
-  const defect = await Defect.create({
-    ...req.body,
-    defectNo,
-    liftId,
-    liftCode,
-    inspectionId: req.body.inspectionId || null,
-    status: 'Open',
-    resolvedDate: null,
-  });
+  let defect;
+  try {
+    defect = await Defect.create({
+      ...req.body,
+      defectNo,
+      liftId,
+      liftCode,
+      inspectionId: req.body.inspectionId || null,
+      status: 'Open',
+      resolvedDate: null,
+    });
+  } catch (err) {
+    // Two concurrent creates can compute the same nextDefectNo() before either inserts -
+    // the partial unique index catches it, surface it as a retry-able 400 instead of a raw 500.
+    if (err.code === 11000) throw ApiError.badRequest('Defect number collision, please try again');
+    throw err;
+  }
   ok(res, defect, 'Defect logged', 201);
 });
 
