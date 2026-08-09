@@ -81,7 +81,7 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
             empty="No servicing schedules for this lift yet."
             onClick={() => {
               onClose();
-              navigate('/scheduling');
+              navigate('/lift-workflow', { state: { lift, step: 0 } });
             }}
             render={(s) => (
               <ListItemText primary={`${s.blockAddress} — ${s.liftCompany}`} secondary={formatDate(s.scheduledDate)} />
@@ -96,7 +96,7 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
             empty="No inspections recorded for this lift yet."
             onClick={() => {
               onClose();
-              navigate('/inspections');
+              navigate('/lift-workflow', { state: { lift, step: 1 } });
             }}
             render={(i) => (
               <ListItemText primary={`${i.reportNo} — ${i.contractor}`} secondary={formatDate(i.inspectionDate)} />
@@ -111,7 +111,7 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
             empty="No defects reported for this lift."
             onClick={() => {
               onClose();
-              navigate('/defects');
+              navigate('/lift-workflow', { state: { lift, step: 2 } });
             }}
             render={(d) => <ListItemText primary={`${d.defectNo} — ${d.title}`} secondary={d.location} />}
             status={(d) => <StatusChip value={d.status} colorMap={DEFECT_STATUS_COLORS} />}
@@ -124,7 +124,7 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
             empty="No rectifications logged for this lift."
             onClick={() => {
               onClose();
-              navigate('/rectifications');
+              navigate('/lift-workflow', { state: { lift, step: 3 } });
             }}
             render={(r) => (
               <ListItemText

@@ -48,7 +48,7 @@ export default function App() {
   const tabs = getTabs(user.role);
 
   // The active tab is derived from the URL (e.g. /lifts) so dialogs elsewhere in the app
-  // can deep-link into a tab with navigate('/scheduling') etc.
+  // can deep-link into a tab with navigate('/lift-workflow') etc.
   const activeTab = location.pathname.replace('/', '') || tabs[0].id;
 
   useEffect(() => {

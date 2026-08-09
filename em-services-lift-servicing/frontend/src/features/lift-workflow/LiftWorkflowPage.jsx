@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForwardOutlined';
@@ -22,8 +23,14 @@ const STEP_COMPONENTS = [SchedulingStep, InspectionsStep, DefectsStep, Rectifica
 // (see steps/*.jsx) - this page only picks which lift to work on and which step's scoped
 // list+CRUD to show, mirroring the app's existing tab-based (not nested-route) navigation.
 export default function LiftWorkflowPage() {
-  const [selectedLift, setSelectedLift] = useState(null);
-  const [activeStep, setActiveStep] = useState(0);
+  // LiftDetailDialog (Lifts page's "View history" action) deep-links here by passing the
+  // lift + target step via navigate(..., { state }) - this page has no URL/query-param
+  // routing of its own, so that's the only way in besides picking a lift from
+  // LiftSearchScreen. Read once on mount; only relevant the instant this page is navigated
+  // to, so a later in-place state change (there isn't one) doesn't need to be tracked.
+  const location = useLocation();
+  const [selectedLift, setSelectedLift] = useState(location.state?.lift ?? null);
+  const [activeStep, setActiveStep] = useState(location.state?.step ?? 0);
 
   // Hooks can't be called conditionally, so this runs even before a lift is picked -
   // useLiftWorkflowStatus no-ops until it's given a real liftId. Keyed on activeStep too
