@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import { useSnackbar } from 'notistack';
 import {
   Box,
   Button,
@@ -10,12 +11,21 @@ import {
   DialogTitle,
   Grid,
   MenuItem,
+  Stack,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import LiftSelect from '../lifts/LiftSelect';
 import { listUsers } from '../../api/authApi';
 import { SCHEDULE_STATUSES } from '../../utils/scheduleHelpers';
+
+// A local, client-only convenience (not submitted anywhere) so a half-filled form survives
+// a refresh - separate from the AI-drafted notes feature that used to live here (removed).
+// Single shared slot rather than per-lift: keeps this simple, matching the stated use case
+// of "don't lose what I was typing", not a full multi-draft system.
+const DRAFT_KEY = 'scheduleForm:draft';
 
 const emptySchedule = {
   townCouncil: '',
@@ -54,6 +64,11 @@ function buildSchema(isEdit) {
 export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, initialLiftId }) {
   const [staffOptions, setStaffOptions] = useState([]);
   const schema = useMemo(() => buildSchema(Boolean(schedule)), [schedule]);
+  const { enqueueSnackbar } = useSnackbar();
+  const theme = useTheme();
+  // Full-screen on a phone-sized viewport - MUI's Dialog margin/max-width defaults leave
+  // very little usable width once a 320-375px screen is involved.
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   // This dialog only ever opens for Admin/Master (SchedulingStep.jsx gates the Add/Edit
   // buttons that trigger it), so listUsers() here always succeeds - no separate role
@@ -101,8 +116,27 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
     }
   }
 
+  function handleSaveDraft() {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(formik.values));
+    enqueueSnackbar('Draft saved', { variant: 'success' });
+  }
+
+  function handleLoadDraft() {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) {
+      enqueueSnackbar('No draft found', { variant: 'info' });
+      return;
+    }
+    try {
+      formik.setValues({ ...emptySchedule, ...JSON.parse(raw) });
+      enqueueSnackbar('Draft loaded', { variant: 'success' });
+    } catch {
+      enqueueSnackbar('No draft found', { variant: 'info' });
+    }
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
       <form onSubmit={formik.handleSubmit}>
         <DialogTitle>{schedule ? 'Edit Schedule' : 'New Spot-Check Schedule'}</DialogTitle>
         <DialogContent dividers sx={{ pt: 3 }}>
@@ -116,8 +150,17 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
             />
           </Box>
 
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+            <Button size="small" onClick={handleSaveDraft}>
+              Save Draft
+            </Button>
+            <Button size="small" onClick={handleLoadDraft}>
+              Load Draft
+            </Button>
+          </Stack>
+
           <Grid container spacing={2.5}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 name="townCouncil"
                 label="Town Council"
@@ -128,7 +171,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.townCouncil && formik.errors.townCouncil}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 name="liftCompany"
                 label="Lift Company"
@@ -150,7 +193,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.blockAddress && formik.errors.blockAddress}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 name="scheduledDate"
                 label="Scheduled Date"
@@ -163,7 +206,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText={formik.touched.scheduledDate && formik.errors.scheduledDate}
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 name="status"
@@ -179,7 +222,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 name="assignedInspector"
                 label="Assigned Inspector"
@@ -189,7 +232,7 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
                 helperText="Free-text display label"
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 select
                 name="assignedStaffId"
