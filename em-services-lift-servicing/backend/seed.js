@@ -1,5 +1,9 @@
 require('dotenv').config();
 
+const dns = require('dns');
+// Same fix as server.js — local routers often block SRV queries used by mongodb+srv://
+dns.setServers(['8.8.8.8', '1.1.1.1']);
+
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const Schedule = require('./src/models/scheduling/Schedule');

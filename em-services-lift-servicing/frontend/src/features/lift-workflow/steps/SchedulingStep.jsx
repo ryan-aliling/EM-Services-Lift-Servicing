@@ -349,12 +349,13 @@ export default function SchedulingStep({ lift }) {
         />
       </Stack>
 
-      <Box sx={{ height: 480, bgcolor: 'background.paper', borderRadius: 2 }}>
+      <Box sx={{ bgcolor: 'background.paper', borderRadius: 2 }}>
         <DataGrid
           rows={filteredSchedules}
           columns={columns}
           getRowId={(row) => row._id}
           loading={loading}
+          autoHeight
           disableRowSelectionOnClick
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
