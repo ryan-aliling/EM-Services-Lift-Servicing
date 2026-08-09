@@ -49,7 +49,7 @@ Fill in the owner for each feature below:
 | --- | --- |
 | Lifts | TBD |
 | Scheduling | Aeric |
-| Inspections | TBD |
+| Inspections | Javier |
 | Defects | TBD |
 | Rectifications | TBD |
 
