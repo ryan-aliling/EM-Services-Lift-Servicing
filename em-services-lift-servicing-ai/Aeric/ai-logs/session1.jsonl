@@ -1,0 +1,15 @@
+{
+  "phase": "scaffold",
+  "prompt": "Shared client requirements + rubric + interim feedback (combine pages, status indicators, data integrity, scope to inspection not servicing). Asked for a baseline for the Scheduling module on top of a few files already created.",
+  "output": "Read the existing scaffold first (Schedule model/controller/routes/api.js already existed) instead of assuming. Found server.js didn't mount the router, design docs were TODO stubs, tests were empty, and no UI was wired in.",
+  "action": "accepted",
+  "action-detail": "Mounted the router, wrote design/Aeric docs against the real model, built a first-pass plain-CSS Scheduling UI, added 10 backend + 6 frontend tests scoped to test:aeric so a shared npm test run wasn't affected, added seed data. Verified with npm install + full test run (16/16) rather than assuming it worked."
+}
+
+{
+  "phase": "scaffold",
+  "prompt": "(self-directed) confirm the baseline actually works.",
+  "output": "Ran the full install/test/build cycle in both apps.",
+  "action": "accepted",
+  "action-detail": "Reported concrete pass/fail results, flagged npm audit findings on new dev dependencies rather than staying silent about them."
+}

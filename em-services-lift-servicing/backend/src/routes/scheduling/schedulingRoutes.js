@@ -5,6 +5,7 @@ const {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  importSchedules,
 } = require('../../controllers/scheduling/schedulingController');
 const { requireAuth, requireRole } = require('../../middleware/auth');
 
@@ -15,7 +16,8 @@ const router = express.Router();
 router.get('/', requireAuth, listSchedules);
 router.get('/:id', requireAuth, getSchedule);
 
-// Create/delete: Admin/Master only - Staff cannot create, reassign or remove schedules.
+// Create/import/delete: Admin/Master only - Staff cannot create, reassign or remove schedules.
+router.post('/import', requireAuth, requireRole('Admin', 'Master'), importSchedules);
 router.post('/', requireAuth, requireRole('Admin', 'Master'), createSchedule);
 
 // Update: any authenticated role reaches the controller, but a Staff caller is restricted

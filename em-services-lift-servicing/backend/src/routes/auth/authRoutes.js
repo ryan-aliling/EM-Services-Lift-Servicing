@@ -1,10 +1,11 @@
 const express = require('express');
-const { login, me, createUser, listUsers, deactivateUser } = require('../../controllers/auth/authController');
+const { login, me, register, createUser, listUsers, deactivateUser } = require('../../controllers/auth/authController');
 const { requireAuth, requireRole } = require('../../middleware/auth');
 
 const router = express.Router();
 
 router.post('/login', login);
+router.post('/register', register);
 router.get('/me', requireAuth, me);
 
 // Account-creation eligibility (Master -> Admin/Staff, Admin -> Staff only) depends on the

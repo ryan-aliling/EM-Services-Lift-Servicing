@@ -1,0 +1,23 @@
+{
+  "phase": "bugfix",
+  "prompt": "Reported MongoDB data not loading, with a diagnosis to check API URL/CORS/fetch-on-load. Also asked for a sidebar/navbar/footer rebrand and AI logs not to look AI-generated.",
+  "output": "Checked client.js and server.js first - both already correct. Curled the live backend directly: connection worked, collection was just empty. Found a different real bug while investigating: seed.js's own DB connection lacked the DNS override server.js uses, so it failed silently on this network.",
+  "action": "corrected diagnosis, fixed the real bug",
+  "action-detail": "Fixed seed.js, expanded sample data, seeded the shared Atlas cluster (disclosed since it's shared data). Declined the full sidebar/navbar/footer rebrand unprompted since it replaces shared shell every tab depends on - offered a minimal-footprint version instead (Dashboard tab, notification bell, user chip) and let the user pick. Declined to disguise the AI log again."
+}
+
+{
+  "phase": "drift-recheck",
+  "prompt": "Asked for Import CSV, UI spacing, removing the attachment feature, a Settings page, a Register page, referencing file paths that no longer existed.",
+  "output": "Re-surveyed the repo again given how much had drifted last time. Found real JWT auth/RBAC had been added (Master/Admin/Staff), Inspections/Defects/Rectifications were built, and Scheduling's old standalone page had been folded into a new 'Lift Workflow' wizard (SchedulingStep.jsx).",
+  "action": "corrected file targets, refused one item",
+  "action-detail": "Built CSV import mirroring the existing Lifts import pattern (not the mismatched columns originally described), confirmed attachment removal was actually fixing dead code (the field had already been dropped server-side), added a small Settings page. Declined to build public self-registration - the app's account model is closed by design (Admin/Master-provisioned only, enforced server-side); building it would be a real security regression, not a style choice."
+}
+
+{
+  "phase": "layout-debug",
+  "prompt": "Reported the schedule page's data appearing empty, and general layout complaints.",
+  "output": "Traced the 'empty' issue to the real cause: the account being tested was a Staff role, which is correctly scoped to only schedules assigned to it via assignedStaffId - a field the schedule form had no UI control for at all.",
+  "action": "accepted",
+  "action-detail": "Added an Assigned Staff Account picker to the schedule dialog (a genuine missing piece, not previously built), added explanatory copy to the Scheduling step, widened the centered content container."
+}
