@@ -12,7 +12,7 @@ Collection: `inspections` (Mongoose model `Inspection`, `backend/src/models/insp
 | Field | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `_id` | ObjectId | auto | — | Mongo-generated primary key. |
-| `reportNo` | String (unique, trimmed) | ✅ | — | Format `INSP-0001` etc. Assigned by the controller from the current max in the (non-deleted) collection, not an ever-incrementing counter — deleting the highest-numbered report and creating a new one reissues that number instead of skipping ahead. |
+| `reportNo` | String (trimmed) | ✅ | — | Format `INSP-0001` etc. Assigned by the controller from the current max among **non-deleted** reports, not an ever-incrementing counter — deleting the highest-numbered report and creating a new one reissues that number instead of skipping ahead. Uniqueness is enforced by a partial index (`{ isDeleted: false }`), not a field-level `unique: true` — a plain unique field would make every reissue fail with a duplicate-key error against the soft-deleted report still holding that number. |
 | `liftId` | ObjectId (ref `Lift`) | ✅ | — | The lift this report is about. Source of truth for which lift; see `liftCode`/`block` below for why they're duplicated. |
 | `scheduleId` | ObjectId (ref `Schedule`) | – | `null` | Optional link to the scheduled visit this report follows up on (client workflow: Lift → Schedule → Inspection). Left `null` for ad-hoc/walk-in inspections with no prior schedule entry. If supplied, the controller validates it resolves to a real, non-deleted schedule **and** that the schedule's own `liftId` (when set) matches this report's `liftId` — an inspection can't claim to follow up on a schedule for a different lift. |
 | `liftCode` | String (trimmed) | ✅ | — | **Snapshot**, not live-joined — copied from the referenced Lift at creation time (and re-copied if `liftId` changes while still Draft). An inspection report is a historical record; it shouldn't silently change if the lift's code/block gets edited months later. |
@@ -91,13 +91,15 @@ this schema was first written. On top of that:
 
 1. **Required fields** — `liftId`, `inspectionDate`, `inspectorName` (Mongoose `required: true`,
    re-checked in the controller for a friendlier 400 message).
-2. **`liftId` must resolve to a real lift** — checked via `Lift.findById` before creation;
-   rejected with a 400 rather than allowed to reference a non-existent/deleted lift.
+2. **`liftId` must resolve to a real, non-deleted lift** — checked via
+   `Lift.findOne({ _id: liftId, isDeleted: false })` before creation; rejected with a 400
+   rather than allowed to reference a non-existent or soft-deleted lift.
 3. **`scheduleId`, if supplied, must resolve to a real, non-deleted schedule for the same lift**
    (see Relationships above).
 4. **No future inspection dates** — enforced on both create and update.
-5. **Report numbers never collide** — `unique: true` on `reportNo`, computed from the current
-   max among non-deleted reports rather than trusted from the client.
+5. **Report numbers never collide among active reports** — enforced by a partial unique
+   index on `reportNo` (`{ isDeleted: false }`), computed from the current max among
+   non-deleted reports rather than trusted from the client.
 6. **Edit/delete lock once submitted** — enforced in the controller (not just hidden in the UI),
    so the rule can't be bypassed by calling the API directly. Editing/deleting is only permitted
    while `overallStatus === 'Draft'`.

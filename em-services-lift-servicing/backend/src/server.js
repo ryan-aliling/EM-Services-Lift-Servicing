@@ -48,6 +48,8 @@ app.use('/api/defects', require('./routes/defects/defectsRoutes'));
 
 app.use('/api/rectifications', require('./routes/rectifications/rectificationsRoutes'));
 
+app.use('/api/audit-log', require('./routes/auditLog/auditLogRoutes'));
+
 // Added while building the inspections module: nothing in the repo was catching errors
 // thrown/forwarded by asyncHandler (ApiError.badRequest/notFound etc.) before this, so they
 // were falling through to Express's default handler and coming back as HTML 500s instead of

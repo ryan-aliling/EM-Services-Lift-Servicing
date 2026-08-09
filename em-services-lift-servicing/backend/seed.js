@@ -13,9 +13,6 @@ const Defect = require('./src/models/defects/Defect');
 const Rectification = require('./src/models/rectifications/Rectification');
 const User = require('./src/models/users/User');
 
-// TODO: each person adds their own seed data here for their feature's models,
-// e.g. connect to DATABASE_URL and insert sample lifts/schedules/inspections/etc.
-
 // Staff names deliberately match the `assignedInspector` strings already used in
 // buildSampleSchedules() below, so that function can set the real `assignedStaffId` link
 // directly via a name lookup - guaranteed 1:1 matches since both are authored together

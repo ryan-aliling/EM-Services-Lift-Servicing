@@ -57,7 +57,7 @@ const schema = Yup.object({
  * targetStatusRef right before triggering formik.handleSubmit(), so the base-field
  * validation (defectId/rectifiedBy/dateRectified) stays centralised either way.
  */
-export default function RectificationForm({ open, rectification, onClose, onSubmit, initialDefectId, liftId }) {
+export default function RectificationForm({ open, rectification, onClose, onSubmit, initialDefectId, liftId, excludeDefectIds }) {
   const { enqueueSnackbar } = useSnackbar();
   const isEdit = Boolean(rectification);
   const isEndorsed = isEdit && rectification.status === 'Endorsed';
@@ -155,6 +155,7 @@ export default function RectificationForm({ open, rectification, onClose, onSubm
                 helperText={formik.touched.defectId && formik.errors.defectId}
                 disabled={isEdit || Boolean(initialDefectId)}
                 liftId={liftId}
+                excludeIds={excludeDefectIds}
               />
             </Grid>
           </Grid>

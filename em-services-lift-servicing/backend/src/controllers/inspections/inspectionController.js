@@ -28,7 +28,7 @@ function assertNotFutureDate(dateStr) {
 // never-decreasing counter, so deleting e.g. INSP-0005 and creating a new report
 // reissues INSP-0005 instead of jumping to INSP-0006.
 async function nextReportNo() {
-  const docs = await Inspection.find({}, 'reportNo').lean();
+  const docs = await Inspection.find({ isDeleted: false }, 'reportNo').lean();
   const nums = docs
     .map((d) => parseInt(String(d.reportNo).split('-')[1], 10))
     .filter((n) => !isNaN(n));
@@ -44,7 +44,7 @@ function deriveCompliance(defects = []) {
 // id doesn't resolve to a real lift, so a report can never be created against a lift that
 // doesn't exist.
 async function resolveLiftSnapshot(liftId) {
-  const lift = await Lift.findById(liftId).catch(() => null);
+  const lift = await Lift.findOne({ _id: liftId, isDeleted: false }).catch(() => null);
   if (!lift) throw ApiError.badRequest('Selected lift not found');
   return { liftCode: lift.liftCode, block: lift.block };
 }

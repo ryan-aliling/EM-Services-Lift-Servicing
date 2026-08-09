@@ -28,8 +28,11 @@ const inspectionSchema = new mongoose.Schema(
     // Assigned by the controller (see nextReportNo in inspectionController.js) from the
     // current max in the collection, not an ever-incrementing counter — so deleting the
     // highest-numbered report and creating a new one reissues that same number instead of
-    // skipping ahead. unique (not sparse) so two reports can never collide on the same number.
-    reportNo: { type: String, required: true, unique: true, trim: true },
+    // skipping ahead. Uniqueness is enforced below via a partial index scoped to
+    // isDeleted: false, not a plain unique field - a soft-deleted report keeps its
+    // original reportNo for the audit trail, and that value has to be reissuable to a
+    // new active report without colliding with the deleted one.
+    reportNo: { type: String, required: true, trim: true },
 
     // The lift this report is about, plus the optional scheduled visit it followed up on
     // (Lift -> Schedule -> Inspection, per the client's workflow doc). liftId is the source
@@ -57,6 +60,11 @@ const inspectionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Only active reports need to be collision-free on reportNo - a soft-deleted report
+// keeps its original number for the audit trail, and that number is exactly what
+// nextReportNo() reissues to the next active report (see inspectionController.js).
+inspectionSchema.index({ reportNo: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
 
 module.exports = mongoose.model('Inspection', inspectionSchema);
 module.exports.CHECKLIST_RESULTS = CHECKLIST_RESULTS;

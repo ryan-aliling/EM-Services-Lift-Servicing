@@ -2,7 +2,11 @@
 
 Feature owner: Elijah
 Base path: `/api/defects` (mounted in `backend/src/server.js`)
-Auth: none yet — write routes have a standing TODO to add `requireAuth`/`requireRole('Admin', 'Manager')` once a login system exists and issues JWTs with a `role` claim (same TODO as `liftRoutes.js`). All endpoints are currently open regardless of the frontend's client-side `canEdit` gate.
+Auth: every endpoint requires `Authorization: Bearer <token>` (`requireAuth`). On top of
+that, `DELETE /:id` additionally requires `requireRole('Admin', 'Master')` — every other
+endpoint (list/stats/get/create/update) is open to any authenticated role, including
+Staff. Defects aren't ownership-scoped the way Scheduling is: a Staff member can create or
+edit a defect regardless of which schedule/lift it's tied to.
 
 All request/response bodies are JSON. Successful responses use the shared envelope `{ success: true, message, data }` (`backend/src/utils/apiResponse.js`); error responses use `{ success: false, message }` (global error handler in `server.js`). All `data` shapes below are the defect object documented in [[defect-database-schema]].
 
@@ -165,14 +169,17 @@ The first time a defect's status reaches `Resolved`, `resolvedDate` is stamped w
 
 ## DELETE /api/defects/:id
 
-**Hard** delete — the document is permanently removed with `findByIdAndDelete`. This is a deviation from the soft-delete convention used elsewhere in the app (e.g. Scheduling); there is currently no way to recover or audit a deleted defect.
+Admin/Master only. **Soft delete** (`isDeleted: true`) — matches every other model in the
+app. Also cascades: soft-deletes any Rectification pointing at this defect
+(`cascadeFromDefects` in `backend/src/utils/cascadeDelete.js`).
 
 **200 OK**
 ```json
-{ "success": true, "message": "Defect deleted", "data": null }
+{ "success": true, "message": "Defect deleted", "data": { "cascaded": { "rectifications": 0 } } }
 ```
 
-**404 Not Found** — id doesn't exist: `{ "success": false, "message": "Defect not found" }`
+**403 Forbidden** — caller is Staff.
+**404 Not Found** — id doesn't exist (also returned for an already-deleted defect): `{ "success": false, "message": "Defect not found" }`
 
 ---
 

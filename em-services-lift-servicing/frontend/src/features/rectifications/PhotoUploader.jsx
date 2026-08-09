@@ -18,10 +18,17 @@ export default function PhotoUploader({ photos, onChange, disabled, onError }) {
   async function handleFilesSelected(e) {
     const files = Array.from(e.target.files || []);
     e.target.value = ''; // allow re-selecting the same file(s) later
+    // Accumulate locally rather than reading the `photos` prop fresh each iteration - the
+    // prop doesn't update synchronously while this loop awaits each upload, so appending
+    // to it directly would silently drop every file except the last one whenever 2+ files
+    // are selected at once (each onChange([...photos, url]) would overwrite the previous
+    // iteration's addition instead of building on it).
+    let uploaded = photos;
     for (const file of files) {
       try {
-        const url = await uploadFile(file, 'rectifications');
-        onChange([...photos, url]);
+        const url = await uploadFile(file, 'rectifications', { compress: true });
+        uploaded = [...uploaded, url];
+        onChange(uploaded);
       } catch (err) {
         onError?.(`Failed to upload ${file.name}: ${err.message}`);
       }
