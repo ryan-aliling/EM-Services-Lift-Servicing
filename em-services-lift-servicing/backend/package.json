@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.js",
     "seed": "node seed.js",
     "migrate:assigned-staff": "node scripts/migrateAssignedStaff.js",
-    "test": "echo \"TODO: add backend tests\"",
+    "test": "jest tests/ --runInBand",
     "test:aeric": "jest tests/Aeric --runInBand",
     "test:javier": "jest tests/Javier --runInBand",
     "test:elijah": "jest tests/Elijah --runInBand",

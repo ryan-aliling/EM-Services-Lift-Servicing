@@ -14,8 +14,11 @@ const defectSchema = new mongoose.Schema(
     // nextDefectNo in defectController.js), not an ever-incrementing counter -
     // mirrors reportNo in models/inspections/Inspection.js so deleting the
     // highest-numbered defect and creating a new one reissues that number
-    // instead of skipping ahead.
-    defectNo: { type: String, required: true, unique: true, trim: true },
+    // instead of skipping ahead. Uniqueness is enforced below via a partial index
+    // scoped to isDeleted: false, not a plain unique field - a soft-deleted defect
+    // keeps its original defectNo for the audit trail, and that value has to be
+    // reissuable to a new active defect without colliding with the deleted one.
+    defectNo: { type: String, required: true, trim: true },
 
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '', trim: true },
@@ -52,6 +55,11 @@ const defectSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Only active defects need to be collision-free on defectNo - a soft-deleted defect
+// keeps its original number for the audit trail, and that number is exactly what
+// nextDefectNo() reissues to the next active defect (see defectController.js).
+defectSchema.index({ defectNo: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } });
 
 module.exports = mongoose.model('Defect', defectSchema);
 module.exports.DEFECT_SEVERITIES = DEFECT_SEVERITIES;

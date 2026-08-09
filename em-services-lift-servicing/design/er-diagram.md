@@ -131,6 +131,12 @@ erDiagram
   delete, so the compliance/audit trail is never actually destroyed.
 - **`USER.createdBy`** is self-referential (a User was created by another User) — used for
   auditability, not access control.
+- **The Audit Log feature adds no seventh entity here, on purpose.** `GET /api/audit-log`
+  (Admin/Master only) is a read-only view that queries these six collections directly and
+  merges the results by `updatedAt` — it doesn't write anywhere, so there's no new collection
+  or relationship to diagram. See `architecture.md`'s "Audit Log" section for what it can and
+  can't show (notably: no model here has a `createdBy`/`updatedBy` field, so the log can say
+  *what* changed and *when*, not *which user* changed it).
 
 ## Generating the PNG
 

@@ -8,7 +8,7 @@ import { fetchDefects } from '../../api/defectApi';
  * the Defects module's own API (fetchDefects) rather than duplicating any Defect CRUD
  * logic here.
  */
-export default function DefectSelect({ value, onChange, error, helperText, disabled, liftId }) {
+export default function DefectSelect({ value, onChange, error, helperText, disabled, liftId, excludeIds }) {
   const [defects, setDefects] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +23,15 @@ export default function DefectSelect({ value, onChange, error, helperText, disab
 
   // Optional scoping for the Lift Workflow page's Rectifications step - when a liftId is
   // passed, only offer defects logged against that lift instead of the whole directory.
-  const options = liftId ? defects.filter((d) => d.liftId === liftId) : defects;
+  // excludeIds additionally hides defects that already have a rectification against them
+  // (any status) - same rule the per-defect "Rectify" shortcut already enforces by
+  // disabling itself, applied here too so the generic "New Rectification" entry point
+  // can't be used to create a second, duplicate rectification for the same defect. The
+  // currently selected value is always kept visible even if it's in excludeIds, so editing
+  // an existing rectification (which locks this field) never hides its own defect.
+  const options = defects
+    .filter((d) => !liftId || d.liftId === liftId)
+    .filter((d) => !excludeIds || d._id === value || !excludeIds.has(d._id));
 
   const selected = defects.find((d) => d._id === value) || null;
 
