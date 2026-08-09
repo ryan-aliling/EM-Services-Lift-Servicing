@@ -11,6 +11,15 @@ rectification."** It logs the actual inspection (checklist + defects), and hands
 Rectification feature once a defect has been raised and the contractor notified — it does not
 cover planning the visit (Scheduling) or performing the fix (Rectifications).
 
+> **Navigation update:** this feature was originally its own top-level tab. It's since been
+> folded into the combined **Lift Workflow** (`frontend/src/features/lift-workflow/`): a user
+> first picks a lift, then steps through Scheduling → **Inspections** → Defects →
+> Rectifications for that one lift via `WorkflowStepper.jsx`. The use cases below describe the
+> same underlying behaviour — Inspections' own CRUD/API is unchanged — just reached by first
+> selecting a lift rather than a standalone tab. `InspectionsStep.jsx` scopes the report list to
+> `liftId` matching the currently-selected lift; everything else (form, checklist, defects,
+> detail view) is identical to the original `Inspections.jsx`.
+
 Per client feedback: the checklist form must match the client's real spot-check checklist
 (currently placeholder items pending the client's actual document — see
 `frontend/src/features/inspections/inspectionConstants.js`), and the client is renaming this
@@ -20,10 +29,10 @@ service from "servicing" to "supervision" (naming only, the workflow is unchange
 
 | Actor | Description |
 | --- | --- |
-| LMS Staff (Inspector) | Creates and fills in inspection reports during a spot-check, notifies the contractor of defects found. |
-| Contractor / Lift Company | Notified when a defect is raised against a report; not a direct system user yet (no login system exists — see `frontend/src/context/AuthContext.jsx`), but represented by the `contractor` field and the notify-contractor action. |
-| Supervisor | Views inspection history/status across all reports for oversight and audit purposes. |
-| System | Assigns report numbers, enforces the audit-trail lock (no editing/deleting once submitted), derives compliance from logged defects, and snapshots lift details at the time of inspection. |
+| LMS Staff (Inspector) | Creates and fills in inspection reports during a spot-check, notifies the contractor of defects found. **Now a real role** (`Staff`, via the app's JWT auth) — restricted from deleting reports or notifying contractors (Admin/Master only), and from creating/editing an inspection against a schedule assigned to a different staff member. |
+| Admin / Master | Full access: everything a Staff user can do, plus delete and notify-contractor, and no schedule-ownership restriction. |
+| Contractor / Lift Company | Notified when a defect is raised against a report; not a direct system user (no contractor-facing login exists), represented by the `contractor` field and the notify-contractor action. |
+| System | Assigns report numbers, enforces the audit-trail lock (no editing/deleting once submitted), soft-deletes (cascading to linked Defects/Rectifications) instead of hard-deleting, derives compliance from logged defects, and snapshots lift details at the time of inspection. |
 
 ## Use Case Diagram (textual)
 
@@ -86,26 +95,35 @@ System ── Assign/Reuse Report Numbers
 
 ## UC3 — Edit / Delete Report (Draft only)
 
-- **Actor:** LMS Staff
+- **Actor:** LMS Staff (edit only), Admin/Master (edit + delete)
 - **Main flow:**
-  1. Staff opens a `Draft` report from the list (Edit/Delete icons are only enabled for Drafts).
+  1. Staff opens a `Draft` report from the list (Edit icon only enabled for Drafts; Delete icon
+     only enabled for Drafts *and* only visible/usable to Admin/Master).
   2. Staff edits any field, including re-picking the lift (re-snapshots `liftCode`/`block` if
-     changed) or the checklist/defects, and saves — or deletes the draft outright.
+     changed) or the checklist/defects, and saves — or an Admin/Master deletes the draft
+     outright (soft delete — see System actor above).
 - **Alternate/edge flows:**
   - Report is `Submitted`/`Under Review`/`Closed` → Edit/Delete icons are disabled in the UI, and
     the API independently rejects the request even if called directly (client feedback:
     "shouldn't be able to edit after submitting"; kept for audit purposes on delete).
+  - A Staff user attempts to delete any report, or notify a contractor → 403, regardless of the
+    report's status or who created it (Admin/Master-only actions).
+  - A Staff user attempts to create/edit a report against a schedule assigned to a different
+    staff member → 403 (doesn't apply if there's no `scheduleId`, or if the caller is
+    Admin/Master).
 
 ## UC4 — Notify Contractor of Defects
 
-- **Actor:** LMS Staff
-- **Precondition:** Report has at least one logged defect.
+- **Actor:** Admin/Master only (Staff is forbidden from this action)
+- **Precondition:** Report has at least one logged (embedded) defect.
 - **Main flow:**
-  1. Staff triggers "Notify Contractor" on a report with defects.
+  1. Admin/Master triggers "Notify Contractor" on a report with defects.
   2. System records `contractorNotifiedAt`, flips each `Open` defect to `Acknowledged`, and moves
      the report's `overallStatus` to `Under Review`.
-- **Alternate flow:** Report has zero defects → rejected, "No defects logged on this report to
-  notify the contractor about."
+- **Alternate flows:**
+  - Report has zero defects → rejected, "No defects logged on this report to notify the
+    contractor about."
+  - Caller is Staff → 403.
 
 ## UC5 — Export Report List
 

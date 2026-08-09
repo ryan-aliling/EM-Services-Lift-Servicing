@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import {
   Box, Stack, Paper, TextField, Select, MenuItem, IconButton, Button, Typography, Avatar,
-  Dialog, Tooltip
+  Dialog, Tooltip, LinearProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
-import { compressImage } from '../../utils/compressImage';
+import { useFileUpload } from '../../hooks/useFileUpload';
 import StatusChip from '../../components/StatusChip';
 import { DEFECT_SEVERITY_COLORS } from '../../theme/statusColors';
 
 export default function DefectEditor({ defects, onChange, readOnly, disabled, disabledReason }) {
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadingIndex, setUploadingIndex] = useState(null);
+  const { uploadFile, uploading, progress } = useFileUpload();
   const locked = readOnly || disabled;
 
   const update = (index, field, value) => {
@@ -29,13 +32,21 @@ export default function DefectEditor({ defects, onChange, readOnly, disabled, di
     onChange([...defects, { description: '', severity: 'Minor', photoUrl: '', status: 'Open' }]);
   };
 
+  // Uses the app's shared Cloudinary signed-upload flow (same as Rectifications'
+  // PhotoUploader.jsx) instead of the base64-in-Mongo approach this used to use - keeps
+  // API responses small and gives every defect photo a real, permanent URL instead of a
+  // multi-hundred-KB data URI embedded in every inspection document returned by the API.
   const handlePhoto = async (index, file) => {
     if (!file) return;
+    setUploadError('');
+    setUploadingIndex(index);
     try {
-      const dataUrl = await compressImage(file);
-      update(index, 'photoUrl', dataUrl);
+      const url = await uploadFile(file, 'inspections');
+      update(index, 'photoUrl', url);
     } catch (err) {
-      console.error('Photo compression failed', err);
+      setUploadError(`Failed to upload ${file.name}: ${err.message}`);
+    } finally {
+      setUploadingIndex(null);
     }
   };
 
@@ -45,6 +56,9 @@ export default function DefectEditor({ defects, onChange, readOnly, disabled, di
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           {disabledReason || 'Mark a checklist item as "Fail" before logging a defect.'}
         </Typography>
+      )}
+      {uploadError && (
+        <Typography variant="body2" color="error" sx={{ mb: 1 }}>{uploadError}</Typography>
       )}
       <Stack spacing={1.5}>
         {defects.length === 0 && (
@@ -83,14 +97,15 @@ export default function DefectEditor({ defects, onChange, readOnly, disabled, di
               </Select>
             </Stack>
 
-            <Stack direction="row" spacing={1.5} alignItems="center">
+            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
               {!locked && (
-                <Button size="small" variant="outlined" component="label">
-                  Upload Photo
+                <Button size="small" variant="outlined" component="label" disabled={uploading}>
+                  {uploadingIndex === i ? `Uploading… ${progress}%` : 'Upload Photo'}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     hidden
+                    disabled={uploading}
                     onChange={(e) => handlePhoto(i, e.target.files[0])}
                   />
                 </Button>
@@ -124,6 +139,9 @@ export default function DefectEditor({ defects, onChange, readOnly, disabled, di
               )}
               {d.status && <StatusChip value={d.severity} colorMap={DEFECT_SEVERITY_COLORS} />}
             </Stack>
+            {uploadingIndex === i && (
+              <LinearProgress variant="determinate" value={progress} sx={{ mt: 1, borderRadius: 1 }} />
+            )}
           </Paper>
         ))}
       </Stack>
