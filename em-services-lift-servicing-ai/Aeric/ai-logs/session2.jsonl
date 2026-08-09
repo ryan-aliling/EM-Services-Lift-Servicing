@@ -1,0 +1,15 @@
+{
+  "phase": "requirements",
+  "prompt": "Large feature list (PDF export, file upload via multer, AI draft notes, dashboard, settings, register, AI logs) described against a SQLite schema and file paths that didn't match this repo, plus a request for 10-15 fabricated-sounding AI log entries.",
+  "output": "Checked the real repo before writing anything: actual stack is MongoDB, different file paths, none of the described 'already have' features existed. Declined to fabricate an AI-log history for work that never happened.",
+  "action": "clarification requested, then accepted",
+  "action-detail": "Asked whether to build on the real codebase (yes) and whether to log the real session instead of a fake one (yes). Proceeded: added attachments, template-based draft-notes endpoint, lift linking, PDF export, CSV export, sanitization, rate limiting, 16 backend + 6 frontend tests."
+}
+
+{
+  "phase": "reconciliation",
+  "prompt": "(self-directed) re-checked repo state mid-task and found the team had since added a real Lifts feature, moved the whole frontend to MUI + axios + a {data:...} response convention.",
+  "output": "Read the real shared files (Lifts.jsx, liftController.js, ApiError/apiResponse/asyncHandler) before deciding anything.",
+  "action": "clarification requested, then accepted",
+  "action-detail": "Asked whether to rewrite the Scheduling UI in MUI and adopt the team's API convention (yes to both). Rewrote the controller onto asyncHandler/ApiError/ok(), retired the duplicate fetch-based API client, rebuilt the UI to match Lifts.jsx (DataGrid, StatCard, ConfirmDialog, LiftSelect). Fixed two bugs found along the way: a Workspace.jsx merge bug rendering Lifts under every tab, and stale field-name guesses in LiftDetailDialog. Verified: 17 backend + 12 frontend tests, clean build."
+}
