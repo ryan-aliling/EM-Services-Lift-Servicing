@@ -171,7 +171,11 @@ export default function SchedulingStep({ lift }) {
     setImporting(true);
     try {
       const text = await file.text();
-      const payloads = rowsToSchedulePayloads(parseCSV(text));
+      // Stamp the currently selected lift onto every imported row - CSV columns don't
+      // include liftId (impractical to hand-type an ObjectId), so without this every
+      // imported schedule stayed unlinked and never matched this page's liftId filter
+      // below, making a "successful" import look like it silently did nothing.
+      const payloads = rowsToSchedulePayloads(parseCSV(text)).map((row) => ({ ...row, liftId: lift._id }));
       if (!payloads.length) {
         enqueueSnackbar('No data rows found in that CSV', { variant: 'warning' });
         return;

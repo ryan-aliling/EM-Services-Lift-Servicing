@@ -136,8 +136,10 @@ export default function InspectionsStep({ lift }) {
       setDeleteTarget(null);
       load();
     } catch (err) {
+      // Left open (not cleared) on failure, matching DefectsStep/RectificationsStep's
+      // delete handlers - a failed delete (e.g. report no longer a draft) shouldn't
+      // silently dismiss the confirmation without the user seeing it happen.
       enqueueSnackbar(err.response?.data?.message || 'Failed to delete', { variant: 'error' });
-      setDeleteTarget(null);
     }
   };
 

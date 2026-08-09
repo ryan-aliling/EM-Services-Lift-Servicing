@@ -111,21 +111,4 @@ const deactivateUser = asyncHandler(async (req, res) => {
   ok(res, { id: target._id }, 'Account deactivated');
 });
 
-// POST /api/auth/register (public) - self-service signup, always Staff role. Never lets the
-// caller pick a role (unlike createUser) so this can't be used to self-provision Admin/Master.
-const register = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password) throw ApiError.badRequest('name, email and password are required');
-  assertValidCredentials(email, password);
-
-  const normalizedEmail = String(email).toLowerCase();
-  const existing = await User.findOne({ email: normalizedEmail });
-  if (existing) throw ApiError.badRequest('An account with that email already exists');
-
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  const user = await User.create({ name, email: normalizedEmail, passwordHash, role: 'Staff' });
-
-  ok(res, toPublicUser(user), 'Account created', 201);
-});
-
-module.exports = { login, me, register, createUser, listUsers, deactivateUser };
+module.exports = { login, me, createUser, listUsers, deactivateUser };

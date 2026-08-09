@@ -129,15 +129,23 @@ const createInspection = asyncHandler(async (req, res) => {
   assertScheduleAssignedToStaff(schedule, req.user);
   const defects = req.body.defects || [];
 
-  const inspection = await Inspection.create({
-    ...req.body,
-    reportNo,
-    liftCode,
-    block,
-    scheduleId: req.body.scheduleId || null,
-    compliance: req.body.compliance || deriveCompliance(defects),
-    overallStatus: req.body.overallStatus || 'Draft',
-  });
+  let inspection;
+  try {
+    inspection = await Inspection.create({
+      ...req.body,
+      reportNo,
+      liftCode,
+      block,
+      scheduleId: req.body.scheduleId || null,
+      compliance: req.body.compliance || deriveCompliance(defects),
+      overallStatus: req.body.overallStatus || 'Draft',
+    });
+  } catch (err) {
+    // Two concurrent creates can compute the same nextReportNo() before either inserts -
+    // the partial unique index catches it, surface it as a retry-able 400 instead of a raw 500.
+    if (err.code === 11000) throw ApiError.badRequest('Report number collision, please try again');
+    throw err;
+  }
 
   ok(res, inspection, 'Inspection report created', 201);
 });
@@ -193,7 +201,9 @@ const notifyContractor = asyncHandler(async (req, res) => {
   }
 
   inspection.contractorNotifiedAt = new Date();
-  inspection.defects = inspection.defects.map((d) => (d.status === 'Open' ? { ...d.toObject(), status: 'Acknowledged' } : d));
+  inspection.defects = inspection.defects.map((d) =>
+    d.status === 'Open' ? { ...d.toObject(), status: 'Acknowledged' } : d.toObject()
+  );
   inspection.overallStatus = 'Under Review';
   await inspection.save();
 

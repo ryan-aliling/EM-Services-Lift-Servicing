@@ -34,7 +34,13 @@ const schema = Yup.object({
   status: Yup.string().oneOf(LIFT_STATUSES).required(),
   manufacturer: Yup.string(),
   installDate: Yup.date().nullable(),
-  lastServiced: Yup.date().nullable(),
+  lastServiced: Yup.date()
+    .nullable()
+    .test('not-before-install', 'Last serviced cannot be before install date', function (value) {
+      const { installDate } = this.parent;
+      if (!value || !installDate) return true;
+      return new Date(value) >= new Date(installDate);
+    }),
 });
 
 export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
@@ -170,6 +176,8 @@ export default function LiftFormDialog({ open, lift, onClose, onSubmit }) {
                 slotProps={{ inputLabel: { shrink: true } }}
                 value={formik.values.lastServiced}
                 onChange={formik.handleChange}
+                error={formik.touched.lastServiced && Boolean(formik.errors.lastServiced)}
+                helperText={formik.touched.lastServiced && formik.errors.lastServiced}
               />
             </Grid>
           </Grid>

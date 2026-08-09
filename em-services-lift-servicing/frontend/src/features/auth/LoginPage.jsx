@@ -4,7 +4,9 @@ import ElevatorOutlinedIcon from '@mui/icons-material/ElevatorOutlined';
 import { useAuth } from '../../context/AuthContext';
 
 // Rendered by AuthGate.jsx whenever there's no authenticated user - standalone, no
-// AppBar/TabBar chrome, since nothing else in the app should be reachable yet.
+// AppBar/TabBar chrome, since nothing else in the app should be reachable yet. No
+// self-registration by design - accounts are provisioned via the Admin/Master-gated
+// Accounts page only (see features/accounts/AccountsPage.jsx).
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');

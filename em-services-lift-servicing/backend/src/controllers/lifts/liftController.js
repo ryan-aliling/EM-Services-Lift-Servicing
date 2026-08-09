@@ -10,6 +10,16 @@ function assertRequiredFields(body) {
   if (missing.length) throw ApiError.badRequest(`Missing required field(s): ${missing.join(', ')}`);
 }
 
+// Both dates are optional, so this only fires once both are actually known - either
+// straight from the request, or (on update) the existing document's stored value for
+// whichever one this request didn't touch.
+function assertServiceDateOrder(installDate, lastServiced) {
+  if (!installDate || !lastServiced) return;
+  if (new Date(lastServiced) < new Date(installDate)) {
+    throw ApiError.badRequest('Last serviced date cannot be before the install date');
+  }
+}
+
 const listLifts = asyncHandler(async (req, res) => {
   const { status, type, q } = req.query;
   const filter = { isDeleted: false };
@@ -43,6 +53,7 @@ const getLift = asyncHandler(async (req, res) => {
 
 const createLift = asyncHandler(async (req, res) => {
   assertRequiredFields(req.body);
+  assertServiceDateOrder(req.body.installDate, req.body.lastServiced);
   let lift;
   try {
     lift = await Lift.create(req.body);
@@ -54,6 +65,17 @@ const createLift = asyncHandler(async (req, res) => {
 });
 
 const updateLift = asyncHandler(async (req, res) => {
+  // Need the existing document whenever only one of the two dates is being changed -
+  // otherwise there's nothing to compare a lone updated field against.
+  if ('installDate' in req.body || 'lastServiced' in req.body) {
+    const existing = await Lift.findOne({ _id: req.params.id, isDeleted: false }, 'installDate lastServiced');
+    if (existing) {
+      const effectiveInstall = 'installDate' in req.body ? req.body.installDate : existing.installDate;
+      const effectiveServiced = 'lastServiced' in req.body ? req.body.lastServiced : existing.lastServiced;
+      assertServiceDateOrder(effectiveInstall, effectiveServiced);
+    }
+  }
+
   let lift;
   try {
     lift = await Lift.findByIdAndUpdate(req.params.id, req.body, {
@@ -98,6 +120,7 @@ const importLifts = asyncHandler(async (req, res) => {
     const row = rows[i];
     try {
       assertRequiredFields(row);
+      assertServiceDateOrder(row.installDate, row.lastServiced);
       await Lift.create(row);
       created += 1;
     } catch (err) {

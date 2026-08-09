@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
@@ -29,18 +29,31 @@ const emptySchedule = {
   liftId: '',
 };
 
-const schema = Yup.object({
-  townCouncil: Yup.string().trim().required('Town council is required'),
-  liftCompany: Yup.string().trim().required('Lift company is required'),
-  blockAddress: Yup.string().trim().required('Block/Lift address is required'),
-  scheduledDate: Yup.date().typeError('Enter a valid date').required('Scheduled date is required'),
-  status: Yup.string().oneOf(SCHEDULE_STATUSES).required(),
-  assignedInspector: Yup.string(),
-  notes: Yup.string(),
-});
+// isEdit: past dates are only blocked on create - editing an existing (possibly
+// legitimately backfilled) record shouldn't suddenly reject its own stored date.
+function buildSchema(isEdit) {
+  return Yup.object({
+    townCouncil: Yup.string().trim().required('Town council is required'),
+    liftCompany: Yup.string().trim().required('Lift company is required'),
+    blockAddress: Yup.string().trim().required('Block/Lift address is required'),
+    scheduledDate: Yup.date()
+      .typeError('Enter a valid date')
+      .required('Scheduled date is required')
+      .test('not-in-past', 'Scheduled date cannot be in the past', (value) => {
+        if (isEdit || !value) return true;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return new Date(value) >= today;
+      }),
+    status: Yup.string().oneOf(SCHEDULE_STATUSES).required(),
+    assignedInspector: Yup.string(),
+    notes: Yup.string(),
+  });
+}
 
 export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, initialLiftId }) {
   const [staffOptions, setStaffOptions] = useState([]);
+  const schema = useMemo(() => buildSchema(Boolean(schedule)), [schedule]);
 
   // This dialog only ever opens for Admin/Master (SchedulingStep.jsx gates the Add/Edit
   // buttons that trigger it), so listUsers() here always succeeds - no separate role

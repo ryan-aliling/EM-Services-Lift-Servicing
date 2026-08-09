@@ -31,7 +31,12 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 
 const schema = Yup.object({
   liftId: Yup.string().required('Select a lift'),
-  inspectionDate: Yup.date().max(new Date(), 'Inspection date cannot be in the future').required('Inspection date is required'),
+  // A plain .max(new Date(), ...) would freeze "now" at module-load time (evaluated once,
+  // not per validation) - a session left open past midnight would then wrongly reject
+  // today's own date as "in the future". .test() re-evaluates fresh on every validation.
+  inspectionDate: Yup.date()
+    .test('not-future', 'Inspection date cannot be in the future', (value) => !value || new Date(value) <= new Date())
+    .required('Inspection date is required'),
   inspectorName: Yup.string().trim().required('Inspector name is required'),
   overallStatus: Yup.string().oneOf(STATUS_OPTIONS).required(),
 });

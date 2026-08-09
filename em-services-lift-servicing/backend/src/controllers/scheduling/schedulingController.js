@@ -75,6 +75,12 @@ const createSchedule = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('townCouncil, liftCompany, blockAddress and scheduledDate are required');
   }
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (new Date(scheduledDate) < today) {
+    throw ApiError.badRequest('Scheduled date cannot be in the past');
+  }
+
   const schedule = await Schedule.create({
     townCouncil,
     liftCompany,
@@ -171,12 +177,17 @@ const importSchedules = asyncHandler(async (req, res) => {
 
   const failed = [];
   let created = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     try {
       if (!row.townCouncil || !row.liftCompany || !row.blockAddress || !row.scheduledDate) {
         throw new Error('townCouncil, liftCompany, blockAddress and scheduledDate are required');
+      }
+      if (new Date(row.scheduledDate) < today) {
+        throw new Error('Scheduled date cannot be in the past');
       }
       if (row.status && !Schedule.STATUS_VALUES.includes(row.status)) {
         throw new Error(`status must be one of ${Schedule.STATUS_VALUES.join(', ')}`);
