@@ -1,23 +1,164 @@
 {"phase":"coding",
 "prompt":
-"Currently. the application has 6 different pages. What i want to do is to combine Scheduling, inspections, defects, and rectifications into one page.
+"Implement the Rectifications feature for the Lift Servicing Digitisation app.
+This is an individual feature (owner: Ryan) 
 
-What i want is something like the first page where you can search by multiple different filters. Then when you select one, it brings you to scheduling, but only lists the info for that page, or you can create schedule for that one lift, then a next button to go to inspections, then defects, then rectifications. There should also be a back. There should be at the top something like (1) Scheduling ---- (2) Inspections and so on, which should be clickable if you dont want to move one step at a time. Keep the CRUDS separate, no merging, also each data should build on the previous. Like inspections should have lift info and scheduling for example",
-"output": "Done. The four tabs are now merged into one Lift Workflow page, and npm run build in the frontend passes clean. Summary of what changed:
+Reuse the existing shared
+useFileUpload hook and the /api/uploads/presign route for all file uploads
+(photos and signature) — do not build a separate upload path.
 
-Navigation (App.jsx, Workspace.jsx): 6 tabs → 3 (Dashboard, Lifts, Lift Workflow).
+WORKFLOW THIS FEATURE SUPPORTS
+After a defect is fixed, the EM services staff and the lift company do a
+joint on-site inspection. The lift company then submits proof of the fix
+(photos) and e-signs to confirm the work is done. The rectification record
+then shows on the Rectifications page with the photos and signature visible,
+so EM staff can review and endorse it.
 
-New feature folder frontend/src/features/lift-workflow/:
+DATA MODEL — server/models/Rectification.js
+- defectId (ObjectId, ref: Defect, required) — the defect this rectifies
+- rectifiedBy (String, required) — name of the lift company technician
+- liftCompanyName (String)
+- dateRectified (Date, required)
+- proofPhotos (Array of String) — S3 URLs, at least 1 required before
+  submission, allow multiple
+- signatureUrl (String, required) — S3 URL of the e-signature image
+- remarks (String, optional)
+- status (String, enum: ['Draft', 'Submitted', 'Endorsed'], default: 'Draft')
+- endorsedBy (String, optional) — filled in when EM staff endorses after
+  the joint inspection
+- endorsedDate (Date, optional)
+- isDeleted (Boolean, default: false) — soft delete, only allowed while
+  status is 'Draft'
+- timestamps: true
 
-LiftSearchScreen.jsx — the 'first page': search/filter lifts by code, block, unit, status, type. Read-only (no lift CRUD here — that stays on the Lifts tab).
-WorkflowStepper.jsx — the clickable '(1) Scheduling — (2) Inspections — (3) Defects — (4) Rectifications' header; jump to any step directly.
-LiftWorkflowPage.jsx — orchestrator: shows the selected lift, the stepper, the active step, and Back/Next buttons.
-steps/SchedulingStep.jsx, InspectionsStep.jsx, DefectsStep.jsx, RectificationsStep.jsx — each reuses the original page's own API module and form dialog untouched, just scoped to the selected lift (liftId match, or for rectifications, walking defect.liftId since rectifications link to a defect, not a lift directly).
-Small additive changes so a new record is born already linked to the right lift: ScheduleFormDialog, InspectionFormDialog, DefectFormDialog gained an optional initialLiftId prop (locks the lift picker on create); RectificationForm/DefectSelect gained initialDefectId/liftId equivalents. All backward-compatible — no other call sites existed to break.
+BACKEND — server/routes/rectifications.js + controllers/rectificationController.js
+Standard CRUD, plus one extra action:
+- GET /api/rectifications — list all (excluding soft-deleted), populate
+  defectId with basic defect info (description, liftId) for display
+- GET /api/rectifications/:id — single record, fully populated
+- POST /api/rectifications — create as 'Draft' or 'Submitted' depending on
+  whether photos + signature are present; validate at least 1 photo and a
+  signatureUrl are provided before allowing status 'Submitted'
+- PUT /api/rectifications/:id — update fields; if status is 'Endorsed',
+  block edits to proofPhotos/signatureUrl (record is finalized) but still
+  allow remarks
+- PATCH /api/rectifications/:id/endorse — separate endpoint for EM staff
+  to mark status 'Endorsed', sets endorsedBy + endorsedDate; only allowed
+  if status is currently 'Submitted'
+- DELETE /api/rectifications/:id — soft delete; return 400 if status is
+  not 'Draft' (can't delete a submitted/endorsed record)
+- Proper error handling: 404 if not found, 400 for validation errors,
+  meaningful error messages in the response body
 
-Backend: untouched. Confirmed via git status — zero changes to any controller/route/model. Scheduling, Inspections, Defects, and Rectifications keep their fully separate CRUD as you wanted; this was purely a frontend navigation/UX merge.
+FRONTEND — client/src/features/rectifications/
+- RectificationsSection.jsx — the section shown when the Rectifications
+  tab is active
+  - Table/list of rectification records: defect description, lift company,
+    date rectified, status badge (Draft/Submitted/Endorsed), thumbnail of
+    first photo
+  - Click a row to open RectificationDetail.jsx (or an expandable panel)
+    showing: full photo gallery (all proofPhotos, click to enlarge), the
+    signature image, remarks, and endorsement info if endorsed
+  - 'New Rectification' button opens RectificationForm.jsx
+- RectificationForm.jsx — create/edit form
+  - Dropdown/search to select the defect being rectified (fetch from
+    GET /api/defects for the picker — read-only cross-feature call, do not
+    duplicate defect CRUD logic here)
+  - rectifiedBy, liftCompanyName, dateRectified fields
+  - Photo upload: multiple file input, each file goes through
+    useFileUpload.js, show upload progress and thumbnail previews,
+    allow removing a photo before submit
+  - E-signature: signature pad component (use react-signature-canvas or
+    a simple <canvas> with pointer events if you want zero extra deps) —
+    let the lift company draw their signature, 'Clear' button to redo it,
+    on submit convert the canvas to a PNG blob and upload it through
+    useFileUpload.js just like a photo, store the returned URL as
+    signatureUrl
+  - Save as Draft vs Submit — Submit requires at least 1 photo + signature
+  - Edit mode: pre-fill all fields, disable photo/signature editing if
+    status is already 'Endorsed'
+- EndorseButton.jsx — small component shown only to EM staff role (or
+  just always visible for now if you haven't built auth/roles yet) on a
+  'Submitted' record, calls PATCH /api/rectifications/:id/endorse,
+  prompts for endorsedBy name
+- useRectifications.js — hook wrapping all the fetch calls above
+  (list, get one, create, update, endorse, delete)
 
-Deleted (superseded, no longer referenced anywhere): SchedulingPage.jsx, Inspections.jsx, Defects.jsx, RectificationsSection.jsx. All their sub-components (dialogs, useRectifications hook, DefectSelect, ScheduleSelect, CSV columns, etc.) were kept and reused.
+TESTS
+- backend/tests/ryan/test-cases.md listing test cases for the rectification
+  controller (e.g. 'cannot delete a Submitted record', 'cannot endorse a
+  Draft record', 'create requires defectId')
+- backend/tests/ryan/rectification.test.js — unit tests for the controller
+  logic above (mock the DB or use an in-memory MongoDB for tests)
+- frontend/tests/ryan/test-cases.md listing test cases for the UI
+  (e.g. 'submit button disabled until signature is drawn', 'shows all
+  uploaded photos in gallery')
+- frontend/tests/ryan/RectificationForm.test.jsx — basic component tests
 
-One thing worth trying in the running app: open Lift Workflow, pick a lift, create a schedule → advance to Inspections and confirm the lift is pre-locked → create defects → jump to Rectifications and use the 'Rectify' action on a specific defect row to confirm it locks that defect.",
+DELIVERABLE
+Working end-to-end: creating a rectification record with real photo
+uploads and a drawn signature, viewing it with photos + signature
+displayed, and endorsing it.",
+"output": "Create rectifications page according to specifications",
+"action":"accepted"}
+
+
+
+{"phase":"coding",
+"prompt":
+"Replace the S3 presigned-URL upload flow with Cloudinary in this project.
+
+FILES TO CHANGE
+- server/utils/cloudinary.js (new) — configure the `cloudinary` npm package
+  using env vars: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY,
+  CLOUDINARY_API_SECRET
+- server/routes/uploads.js — replace the S3 presign logic with:
+  POST /api/uploads/signature
+  - Accepts optional { folder } in the body (e.g. \"rectifications\",
+    \"inspections\", \"defects\") to organize uploads by feature
+  - Generates a signed upload signature using cloudinary.utils.api_sign_request,
+    with a timestamp and the folder param
+  - Returns { signature, timestamp, apiKey, cloudName, folder }
+  - Do NOT expose CLOUDINARY_API_SECRET to the frontend — only the signature
+- client/src/hooks/useFileUpload.js — replace the S3 PUT logic with:
+  1. Call POST /api/uploads/signature to get
+     { signature, timestamp, apiKey, cloudName, folder }
+  2. Build a FormData with: file, api_key, timestamp, signature, folder
+  3. POST directly to
+     https://api.cloudinary.com/v1_1/<cloudName>/auto/upload
+     (use \"auto\" resource type so it handles both images and any other
+     file type without extra config)
+  4. Return response.secure_url as the fileUrl for the calling component
+     to store — keep the function signature identical to before
+     (e.g. async function uploadFile(file, folder) => returns fileUrl)
+     so no feature code needs to change
+- Remove @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner from
+  package.json if nothing else in the project uses them
+- .env.example — remove AWS_S3_BUCKET, AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY; add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY,
+  CLOUDINARY_API_SECRET
+- README.md — update the media storage section: how to create a free
+  Cloudinary account, find the cloud name/API key/secret in the dashboard,
+  and set them in .env
+- DEPLOYMENT.md — update the checklist item for S3 bucket setup to instead
+  say \"Cloudinary account created, API credentials set in production env
+  vars\"
+
+KEEP UNCHANGED
+- The DB schema fields storing URLs (photoUrl, proofPhotos, signatureUrl,
+  etc.) — Cloudinary's secure_url is just a string URL like S3's was, so
+  no model changes needed
+- Every feature component's calls to useFileUpload — they should keep
+  working exactly as before, just now hitting Cloudinary instead of S3",
+"output": "Cloudinary migration complete and verified end-to-end.
+
+Backend: new backend/src/utils/cloudinary.js configures the SDK from CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET (safe to import with no env vars set — no network call at config time). uploads.js's S3 presign logic replaced with POST /api/uploads/signature, which signs {timestamp, folder?} via cloudinary.utils.api_sign_request and returns {signature, timestamp, apiKey, cloudName, folder} — the API secret never leaves the server, and it 503s if Cloudinary env vars aren't set yet. server.js comment updated to reflect Cloudinary instead of S3. @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner removed (26 packages gone); cloudinary added and installed.
+
+Frontend: useFileUpload.js rewritten to call /api/uploads/signature, then POST a FormData straight to Cloudinary's /auto/upload endpoint, returning secure_url. Kept backward-compatible: same uploadFile(file, folder?) signature and same {uploadFile, uploading, progress, error} return shape, so Scheduling's ScheduleFormDialog.jsx (Aeric's feature) needed zero changes — verified by rerunning test:aeric. My own Rectifications uploads now pass folder: 'rectifications'.
+
+Docs/config: .env.example swapped AWS vars for the three Cloudinary ones; README.md got a new Media Storage section explaining how to create a free Cloudinary account and find the credentials; deployment.md's S3/IAM checklist replaced with the Cloudinary equivalent.
+
+Verified: no leftover AWS references anywhere, all 25 backend Rectification tests pass, all 11 frontend RectificationForm tests pass, Elijah's and Aeric's existing suites pass unchanged, and npm run build succeeds.
+
+Flagged before proceeding: README.md explicitly calls the upload hook/route 'common infrastructure — changes to it should be agreed on by the team rather than made unilaterally.' The swap went ahead since the instructions were fully specified, but the team should get a heads-up before merging, since Scheduling depends on this same hook.",
 "action":"accepted"}
