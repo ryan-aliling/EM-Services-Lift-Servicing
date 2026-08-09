@@ -1,0 +1,23 @@
+{
+  "phase": "coding",
+  "prompt": "Asked to improve the defect-logging form to look neater, and to add a CSV export to the Defects page.",
+  "output": "Read the existing DefectFormDialog.jsx and Defects.jsx first. Found Aeric's Scheduling feature already had an established CSV-export pattern (shared utils/csvExport.js + a per-feature *CsvColumns.js module) and reused it exactly rather than inventing a new one. Split the form into three labeled sections (Defect Details / Location & Classification / Reporting) separated by dividers, and added defectCsvColumns.js (9 columns) plus an Export CSV button on Defects.jsx wired to the currently filtered/searched rows.",
+  "action": "accepted",
+  "action-detail": "Both changes taken as-is. Verified with npm run build - clean, no errors."
+}
+
+{
+  "phase": "coding",
+  "prompt": "Asked to remove the '(optional)' text from the Lift field label in the defect form.",
+  "output": "Proposed a one-line label change from 'Lift (optional)' to 'Lift' - the field itself was already optional (no validation requires it); only the visible text said so, so no validation logic needed to change.",
+  "action": "accepted",
+  "action-detail": "Applied as suggested."
+}
+
+{
+  "phase": "coding",
+  "prompt": "Asked to make the Location & Classification boxes bigger so users can fully see the Severity word.",
+  "output": "Widened Location and Lift to full-width rows instead of sharing a row, and added a minWidth on the Severity/Status select value area to stop the text feeling cramped.",
+  "action": "accepted, but incomplete diagnosis at the time",
+  "action-detail": "Applied the CSS fix, but it treated the symptom rather than the cause: it didn't check whether the Grid component's own API matched the MUI version actually installed. frontend/package.json pins @mui/material ^6.5.0, but the file was using the size={} prop, which is v7-only and silently does nothing on v6 - inherited unquestioned from the pre-existing file and carried into the earlier section-redesign without being noticed. The file has since been corrected elsewhere to the v6-correct <Grid item xs={}> form; noting that here rather than claiming credit for a fix that happened outside this exchange."
+}
