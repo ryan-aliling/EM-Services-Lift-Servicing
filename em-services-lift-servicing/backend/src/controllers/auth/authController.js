@@ -6,6 +6,16 @@ const { ok } = require('../../utils/apiResponse');
 const { signToken } = require('../../utils/jwt');
 
 const SALT_ROUNDS = 10;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Min 8 chars, at least one letter and one number.
+const PASSWORD_RE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+
+function assertValidCredentials(email, password) {
+  if (!EMAIL_RE.test(email)) throw ApiError.badRequest('Enter a valid email address');
+  if (!PASSWORD_RE.test(password)) {
+    throw ApiError.badRequest('Password must be at least 8 characters and include a letter and a number');
+  }
+}
 
 function toPublicUser(user) {
   return { id: user._id, name: user.name, email: user.email, role: user.role };
@@ -55,6 +65,7 @@ const createUser = asyncHandler(async (req, res) => {
   if (!name || !email || !password) {
     throw ApiError.badRequest('name, email and password are required');
   }
+  assertValidCredentials(email, password);
 
   const normalizedEmail = String(email).toLowerCase();
   const existing = await User.findOne({ email: normalizedEmail });
@@ -100,4 +111,21 @@ const deactivateUser = asyncHandler(async (req, res) => {
   ok(res, { id: target._id }, 'Account deactivated');
 });
 
-module.exports = { login, me, createUser, listUsers, deactivateUser };
+// POST /api/auth/register (public) - self-service signup, always Staff role. Never lets the
+// caller pick a role (unlike createUser) so this can't be used to self-provision Admin/Master.
+const register = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) throw ApiError.badRequest('name, email and password are required');
+  assertValidCredentials(email, password);
+
+  const normalizedEmail = String(email).toLowerCase();
+  const existing = await User.findOne({ email: normalizedEmail });
+  if (existing) throw ApiError.badRequest('An account with that email already exists');
+
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  const user = await User.create({ name, email: normalizedEmail, passwordHash, role: 'Staff' });
+
+  ok(res, toPublicUser(user), 'Account created', 201);
+});
+
+module.exports = { login, me, register, createUser, listUsers, deactivateUser };

@@ -158,10 +158,45 @@ const deleteSchedule = asyncHandler(async (req, res) => {
   ok(res, { id: schedule._id, cascaded }, 'Schedule deleted');
 });
 
+// POST /api/scheduling/import
+// Bulk-creates schedules from CSV rows already parsed into plain objects on the frontend
+// (see frontend/src/utils/csvImport.js). Same one-row-at-a-time pattern as importLifts -
+// a bad row doesn't abort the whole batch, and we report exactly which row failed and why.
+// Route-level requireRole('Admin','Master') already keeps Staff out entirely.
+const importSchedules = asyncHandler(async (req, res) => {
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw ApiError.badRequest('No rows to import');
+  }
+
+  const failed = [];
+  let created = 0;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    try {
+      if (!row.townCouncil || !row.liftCompany || !row.blockAddress || !row.scheduledDate) {
+        throw new Error('townCouncil, liftCompany, blockAddress and scheduledDate are required');
+      }
+      if (row.status && !Schedule.STATUS_VALUES.includes(row.status)) {
+        throw new Error(`status must be one of ${Schedule.STATUS_VALUES.join(', ')}`);
+      }
+      await Schedule.create(row);
+      created += 1;
+    } catch (err) {
+      // +2: row 0 is the first data row, and the CSV header itself takes line 1.
+      failed.push({ row: i + 2, blockAddress: row.blockAddress || '', message: err.message });
+    }
+  }
+
+  ok(res, { created, failed }, `Imported ${created} of ${rows.length} schedule(s)`);
+});
+
 module.exports = {
   listSchedules,
   getSchedule,
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  importSchedules,
 };

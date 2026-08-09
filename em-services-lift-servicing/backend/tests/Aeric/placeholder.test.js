@@ -217,3 +217,43 @@ describe('DELETE /api/scheduling/:id', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('POST /api/scheduling/import', () => {
+  test('creates every row when all are valid', async () => {
+    const res = await asUser(admin)
+      .post('/api/scheduling/import')
+      .send({ rows: [validPayload, { ...validPayload, blockAddress: 'Blk 202' }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(2);
+    expect(res.body.data.failed).toHaveLength(0);
+  });
+
+  test('reports per-row failures without aborting the rest of the batch', async () => {
+    const res = await asUser(admin)
+      .post('/api/scheduling/import')
+      .send({
+        rows: [
+          validPayload,
+          { townCouncil: 'Missing fields' },
+          { ...validPayload, blockAddress: 'Blk 203', status: 'Bogus' },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(1);
+    expect(res.body.data.failed).toHaveLength(2);
+    expect(res.body.data.failed[0].row).toBe(3); // header (line 1) + row 1 (line 2) -> row 2 is line 3
+  });
+
+  test('rejects an empty rows array', async () => {
+    const res = await asUser(admin).post('/api/scheduling/import').send({ rows: [] });
+    expect(res.status).toBe(400);
+  });
+
+  test('Staff cannot import schedules', async () => {
+    const staff = await createTestUser('Staff');
+    const res = await asUser(staff).post('/api/scheduling/import').send({ rows: [validPayload] });
+    expect(res.status).toBe(403);
+  });
+});
