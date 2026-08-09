@@ -1,0 +1,7 @@
+{
+  "phase": "design",
+  "prompt": "Asked to fill in 'all the mds for defect management' - design/Elijah/use-cases.md, api-documentation.md, and database-schema.md, which were empty TODO stubs.",
+  "output": "Read Aeric's already-filled Scheduling docs first to match the expected structure and depth, then read the real Defect model, controller, routes, and frontend API client rather than describing an idealized version of the feature. Produced: a use-cases doc (actors, a textual use-case diagram, 8 use cases with main/alternate flows, cross-cutting data-integrity notes); an API doc (all 6 endpoints with real request/response shapes, the actual { success, message, data } envelope, the status-transition table, every error case the controller throws); and a database-schema doc (field table, indexes, relationships to Lift and to the embedded Inspection.defects[] sub-schema, integrity rules).",
+  "action": "accepted",
+  "action-detail": "Used all three docs as written. They flagged real gaps in the implementation honestly instead of glossing over them: DELETE is a hard delete (findByIdAndDelete), not the soft-delete convention Scheduling uses; no DB indexes exist beyond the implicit unique index on defectNo; the backend supports server-side status/severity/q query filters that the frontend doesn't actually call (it filters the full list client-side instead); write routes have no server-side auth/role enforcement yet, only a client-side canEdit check against a hardcoded dev user in AuthContext."
+}
