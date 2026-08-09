@@ -90,16 +90,3 @@ Mapped onto the five-step client workflow (**Lifts → Scheduling → Inspection
   instead of the audit trail only existing implicitly in the database.
 - CSV import/export and PDF export, for the "download as file" / bulk-record-handling
   need called out in the original brief.
-
-## Known gaps against the original brief
-
-Being upfront about what the brief asked for that isn't built yet, so this document stays
-a living reference that design decisions can actually trace back to:
-
-- **GPS auto-fill for location** — not implemented; location is currently a free-text
-  field on a defect.
-- **Automated defect email to the lift company** — the API support for notifying a
-  contractor exists (`notifyContractor`), but nothing in the current UI actually
-  triggers it yet.
-
-These are the natural next increment on top of the current system, not a redesign of it.

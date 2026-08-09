@@ -12,6 +12,7 @@
     "test:javier": "vitest run tests/Javier",
     "test:elijah": "vitest run tests/Elijah",
     "test:ryan": "vitest run tests/Ryan",
+    "test:lucio": "vitest run tests/Lucio",
     "test:workflow": "vitest run tests/LiftWorkflow"
   },
   "dependencies": {

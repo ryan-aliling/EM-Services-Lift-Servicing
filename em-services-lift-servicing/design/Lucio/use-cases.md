@@ -100,14 +100,16 @@ Scheduling / Inspections / Defects ── Link to a Lift via LiftSelect (optiona
 - **Actor:** Admin, Master
 - **Main flow:** Admin/Master removes a lift entered by mistake or decommissioned lifts no
   longer worth tracking.
-- **Data integrity note:** unlike every other feature in this app (Scheduling, Inspections,
-  Defects, Rectifications all use `isDeleted` soft delete), deleting a Lift is a genuine hard
-  delete (`findByIdAndDelete`) — there is no `isDeleted` field on the model at all. A lift with
-  existing Schedule/Inspection/Defect records pointing at it via `liftId` is not blocked from
-  deletion and those records are not cleaned up or cascaded — see [[lift-database-schema]] for
-  the full note on this asymmetry.
+- **Data integrity rule:** deletion is a *soft* delete (`isDeleted: true`) — the record is
+  hidden from all list/detail views but never physically removed, preserving the audit trail,
+  same pattern as Scheduling/Inspections/Defects/Rectifications. Its `liftCode` becomes
+  reissuable to a new lift once soft-deleted (partial unique index — see
+  [[lift-database-schema]]).
 - **Edge flow:** Deleting an already-deleted or non-existent id → 404, not a silent success.
-  Staff attempts this action → 403.
+  Staff attempts this action → 403. A lift with existing Schedule/Inspection/Defect records
+  still pointing at it via `liftId` is not blocked from deletion — those records are left
+  exactly as-is, since Lift isn't wired into the shared cascade-delete utility the way Schedule
+  is (see [[lift-database-schema]]).
 
 ## UC6 — Export Lift List (CSV)
 
@@ -141,12 +143,15 @@ Scheduling / Inspections / Defects ── Link to a Lift via LiftSelect (optiona
 
 - Every lift requires `liftCode`, `block`, `unit`, `type`, and `capacity` — no orphaned/
   incomplete records.
-- `liftCode` is globally unique (Mongo unique index), re-checked at the controller level (`code
-  11000`) for a friendlier 400 message than a raw duplicate-key error.
+- `liftCode` is unique among non-deleted lifts (partial unique index, not a plain field-level
+  unique constraint), re-checked at the controller level (Mongo code `11000`) for a friendlier
+  400 message than a raw duplicate-key error.
 - `type` and `status` are restricted to fixed enums (`Passenger`/`Freight`/`Mixed` and
   `Active`/`Maintenance`/`Out of Service`/`Decommissioned`) at the schema level.
-- Unlike the four workflow features that reference it, Lift has **no soft delete** — see UC5 and
-  [[lift-database-schema]].
+- Soft delete (`isDeleted`) instead of hard delete, same pattern as every other feature in this
+  app — see UC5 and [[lift-database-schema]]. Unlike Scheduling, though, Lift isn't hooked into
+  the shared cascade-delete utility, so soft-deleting a Lift doesn't cascade to (or hide) any
+  Schedule/Inspection/Defect that still references it.
 - `GET /api/lifts` and `GET /api/lifts/:id` are readable by any authenticated role; every write
   action (create/update/delete/import) is Admin/Master only, per the capability matrix in
   `design/Ryan/use-cases.md`.

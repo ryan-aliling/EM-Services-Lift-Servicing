@@ -12,6 +12,7 @@
     "test:javier": "jest tests/Javier --runInBand",
     "test:elijah": "jest tests/Elijah --runInBand",
     "test:ryan": "jest tests/Ryan --runInBand",
+    "test:lucio": "jest tests/Lucio --runInBand",
     "test:auth": "jest tests/Auth --runInBand"
   },
   "dependencies": {
