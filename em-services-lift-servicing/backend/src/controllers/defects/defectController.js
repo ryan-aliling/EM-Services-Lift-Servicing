@@ -29,7 +29,7 @@ function assertRequiredFields(body) {
 // reissues DEF-0005 instead of jumping to DEF-0006 (same approach as inspections'
 // reportNo - see nextReportNo in inspectionController.js).
 async function nextDefectNo() {
-  const docs = await Defect.find({}, 'defectNo').lean();
+  const docs = await Defect.find({ isDeleted: false }, 'defectNo').lean();
   const nums = docs
     .map((d) => parseInt(String(d.defectNo).split('-')[1], 10))
     .filter((n) => !Number.isNaN(n));
@@ -41,7 +41,7 @@ async function nextDefectNo() {
 // lift - same rule the inspections module enforces (resolveLiftSnapshot).
 async function resolveLiftSnapshot(liftId) {
   if (!liftId) return { liftCode: '' };
-  const lift = await Lift.findById(liftId).catch(() => null);
+  const lift = await Lift.findOne({ _id: liftId, isDeleted: false }).catch(() => null);
   if (!lift) throw ApiError.badRequest('Selected lift not found');
   return { liftCode: lift.liftCode };
 }

@@ -32,6 +32,14 @@ five feature collections plus `users` relate to each other.
   rest of the app from rendering until the token's been confirmed against `GET /api/auth/me`
   (never trusted purely from the decoded JWT), so a since-deactivated account is caught
   immediately rather than after its 8-hour token happens to expire.
+- **Audit Log:** an Admin/Master-only tab (`frontend/src/features/audit-log/AuditLogPage.jsx`,
+  hidden from Staff the same way Accounts is — see `App.jsx`'s `getTabs`) showing a merged,
+  most-recent-first feed of activity across Lifts/Scheduling/Inspections/Defects/
+  Rectifications. Deliberately the lightweight option: it's a **read-only view over data every
+  model already tracked** (`createdAt`/`updatedAt`, `isDeleted`), not a new event-sourcing
+  collection — so it required no schema change and adds nothing to `er-diagram.md`. See
+  "Audit Log" under Backend architecture below for how the feed is built, and its "Known
+  limitation" for what this approach can't do.
 - **File uploads:** any feature that needs to upload a photo or signature uses the shared
   `useFileUpload` hook (`frontend/src/hooks/useFileUpload.js`), which talks to the backend only
   for a short-lived Cloudinary signature and then uploads the file bytes directly to Cloudinary
@@ -65,6 +73,28 @@ five feature collections plus `users` relate to each other.
 - **Soft delete throughout:** every feature model uses `isDeleted: true` instead of removing
   documents, so the audit trail (who serviced what, when, and what was found) is never destroyed
   by a delete action.
+- **Audit Log (`/api/audit-log`, `controllers/auditLog/`, `routes/auditLog/`):** unlike every
+  other feature router, this one has no matching model — `listAuditLog` queries the five
+  existing feature models directly (`Lift.find({})`, etc.), each sorted by `updatedAt` descending
+  and capped at the request's `limit`, then merges and re-sorts across all five before slicing to
+  the final count. Deliberately does **not** filter `isDeleted: false` the way every other list
+  endpoint does — a deletion is exactly the kind of event an audit log exists to surface, not
+  hide. `Authorization: Bearer <token>` plus `requireRole('Admin', 'Master')` — the same
+  restriction as Accounts, since this feed surfaces every feature's records, including Schedules
+  a Staff caller wouldn't otherwise see past their own `assignedStaffId` scoping.
+  - **What counts as "Created" vs "Updated" vs "Deleted"** is inferred, not stored: `isDeleted`
+    true means Deleted; `createdAt === updatedAt` (set identically by Mongoose on insert) means
+    Created; otherwise Updated. This is a heuristic over existing timestamps, not a real event
+    log — see "Known limitation" below.
+  - **Known limitation:** no model in this app records *which user* made a given change (no
+    `createdBy`/`updatedBy` field on Lift/Schedule/Inspection/Defect/Rectification) — only
+    free-text fields like `reportedBy`/`inspectorName`/`endorsedBy` that aren't linked to a real
+    account. So this audit log answers "what happened, to which record, when" but not "which
+    logged-in user did it." A per-user attribution log (adding `createdBy`/`updatedBy: ObjectId
+    ref User` to all five models) was considered and deliberately deferred — it would touch
+    every feature owner's `database-schema.md`/`api-documentation.md`, not just this one file,
+    for a level of detail the original brief's "timestamped digital audit log" wording doesn't
+    strictly require.
 
 ## Data storage & integrations
 

@@ -29,8 +29,17 @@ export function AuthProvider({ children }) {
     authApi
       .fetchMe()
       .then(setUser)
-      .catch(() => {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      .catch((err) => {
+        // A 401 here (invalid/expired token, or a since-deactivated account) is already
+        // handled globally by client.js's response interceptor - it clears the token and
+        // hard-reloads before this even runs. Anything else reaching this catch is a
+        // network failure or server error, not proof the session itself is invalid, so the
+        // token is deliberately left in place - a page refresh once connectivity/the
+        // backend recovers can retry fetchMe() against the still-valid token instead of
+        // forcing the user to log in again from scratch over a transient blip.
+        if (err.response?.status === 401) {
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+        }
         setUser(null);
       })
       .finally(() => setIsLoading(false));

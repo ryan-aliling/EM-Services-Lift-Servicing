@@ -43,9 +43,10 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
   useEffect(() => {
     if (!open || !lift) return;
     setLoading(true);
-    // Scheduling/Inspections/Defects/Rectifications backend routes aren't built yet, so each
-    // call is allowed to fail independently (falling back to an empty list) instead of one
-    // 404 blanking out the whole dialog via Promise.all's fail-fast behaviour.
+    // Each call is allowed to fail independently (falling back to an empty list) instead
+    // of one request's failure blanking out the whole dialog via Promise.all's fail-fast
+    // behaviour - e.g. a Staff caller's Scheduling request 404ing for a lift outside their
+    // assignedStaffId scope shouldn't also hide the other three tabs' data.
     const safe = (promise) => promise.catch(() => []);
     Promise.all([
       safe(fetchSchedules({ liftId: lift._id })),
@@ -128,8 +129,8 @@ export default function LiftDetailDialog({ open, lift, onClose }) {
             }}
             render={(r) => (
               <ListItemText
-                primary={r.rectificationId}
-                secondary={r.defect ? `${r.defect.defectNo} — ${r.defect.title}` : 'Legacy record'}
+                primary={r.defectId ? `${r.defectId.defectNo} — ${r.defectId.title || r.defectId.description || ''}` : 'Rectification'}
+                secondary={`${r.rectifiedBy || 'Unknown'} · ${formatDate(r.dateRectified)}`}
               />
             )}
             status={(r) => <StatusChip value={r.status} colorMap={RECTIFICATION_STATUS_COLORS} />}

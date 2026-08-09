@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { compressImage } from '../utils/compressImage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -12,12 +13,17 @@ export function useFileUpload() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
 
-  const uploadFile = useCallback(async (file, folder) => {
+  // `compress: true` is opt-in, not automatic - a caller uploading a real photo (defect/
+  // rectification proof photos) should pass it; e-signatures go through this same hook
+  // and must never be re-encoded as lossy JPEG, so they simply omit it.
+  const uploadFile = useCallback(async (file, folder, { compress = false } = {}) => {
     setUploading(true);
     setProgress(0);
     setError(null);
 
     try {
+      const fileToUpload = compress ? await compressImage(file) : file;
+
       const signRes = await fetch(`${API_BASE_URL}/api/uploads/signature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,7 +40,7 @@ export function useFileUpload() {
       // paramsToSign in routes/uploads.js) - Cloudinary recomputes the signature from
       // whatever arrives with the upload and rejects it on any mismatch.
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
       formData.append('api_key', apiKey);
       formData.append('timestamp', timestamp);
       formData.append('signature', signature);

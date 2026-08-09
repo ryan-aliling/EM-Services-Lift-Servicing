@@ -12,7 +12,7 @@ function assertRequiredFields(body) {
 
 const listLifts = asyncHandler(async (req, res) => {
   const { status, type, q } = req.query;
-  const filter = {};
+  const filter = { isDeleted: false };
   if (status) filter.status = status;
   if (type) filter.type = type;
   if (q) {
@@ -26,17 +26,17 @@ const listLifts = asyncHandler(async (req, res) => {
 
 const liftStats = asyncHandler(async (req, res) => {
   const [total, active, maintenance, outOfService, decommissioned] = await Promise.all([
-    Lift.countDocuments(),
-    Lift.countDocuments({ status: 'Active' }),
-    Lift.countDocuments({ status: 'Maintenance' }),
-    Lift.countDocuments({ status: 'Out of Service' }),
-    Lift.countDocuments({ status: 'Decommissioned' }),
+    Lift.countDocuments({ isDeleted: false }),
+    Lift.countDocuments({ isDeleted: false, status: 'Active' }),
+    Lift.countDocuments({ isDeleted: false, status: 'Maintenance' }),
+    Lift.countDocuments({ isDeleted: false, status: 'Out of Service' }),
+    Lift.countDocuments({ isDeleted: false, status: 'Decommissioned' }),
   ]);
   ok(res, { total, active, maintenance, outOfService, decommissioned });
 });
 
 const getLift = asyncHandler(async (req, res) => {
-  const lift = await Lift.findById(req.params.id);
+  const lift = await Lift.findOne({ _id: req.params.id, isDeleted: false });
   if (!lift) throw ApiError.notFound('Lift not found');
   ok(res, lift);
 });
@@ -69,7 +69,14 @@ const updateLift = asyncHandler(async (req, res) => {
 });
 
 const deleteLift = asyncHandler(async (req, res) => {
-  const lift = await Lift.findByIdAndDelete(req.params.id);
+  // Soft delete - matches every other model in the app, so the audit trail (and any
+  // Schedule/Inspection/Defect that snapshot this lift's liftCode/block) survives the
+  // delete. The isDeleted: false in the query means deleting an already-deleted lift
+  // correctly 404s instead of silently "succeeding" again.
+  const lift = await Lift.findOneAndUpdate(
+    { _id: req.params.id, isDeleted: false },
+    { isDeleted: true }
+  );
   if (!lift) throw ApiError.notFound('Lift not found');
   ok(res, null, 'Lift deleted');
 });

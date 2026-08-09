@@ -1,7 +1,37 @@
-# em-services-lift-servicing
+# EM Services — Lift Servicing Digitisation
+
+Digital replacement for EM Services' paper-based lift spot-check workflow. A single-page
+React frontend talking to a single Express/Mongoose REST API, backed by MongoDB Atlas for
+data and Cloudinary for file storage (defect photos, e-signatures).
 
 ## Overview
-TODO: describe the project.
+
+Every lift under a town council must be regularly serviced and inspected. The paper
+process this app replaces: a contractor services a lift, an EM Services staff member does
+a spot-check the next day and fills in a paper form, any defects found are chased with the
+lift company by email/phone, the contractor fixes them within two weeks, and both sides
+sign off at a joint inspection. Paper forms go missing, handwriting is illegible, and
+there's no automated way to track defect resolution.
+
+This app digitises the full chain as one guided workflow per lift:
+
+**Lifts → Scheduling → Inspections → Defects → Rectifications**
+
+- **Lifts** — the asset register (lift code, block/unit, type, capacity, status).
+- **Scheduling** — plans a spot-check visit against a lift, assigned to a Staff member.
+- **Inspections** — the digital spot-check report: structured checklist, embedded
+  findings, contractor notification tracking.
+- **Defects** — standalone defect records (can be raised from an inspection or logged
+  independently) with severity tagging and a status lifecycle through to closure.
+- **Rectifications** — the lift company's proof of fix (photos + e-signature), reviewed
+  and endorsed by an EM Services inspector, which closes the loop on a defect.
+
+On top of the workflow, the app has role-based accounts (**Master / Admin / Staff**), a
+dashboard, CSV import/export, PDF export, a fully soft-deleted audit trail so nothing is
+ever destroyed by a delete action, and an Admin/Master-only **Audit Log** page that
+surfaces that trail as an actual readable, filterable feed — see `design/architecture.md`
+for the full technical write-up and `design/er-diagram.md` for how the six collections
+relate to each other.
 
 ## Repository Structure
 ```
@@ -13,7 +43,7 @@ em-services-lift-servicing/
 │       ├── TabBar.jsx           Shared tab switcher
 │       ├── Workspace.jsx        Renders the active tab's content area
 │       ├── hooks/useFileUpload.js  Shared Cloudinary signed-upload hook
-│       └── features/            One folder per feature (lifts, scheduling, inspections, defects, rectifications)
+│       └── features/            One folder per feature (lifts, lift-workflow, accounts, dashboard, settings, auth)
 ├── backend/                    Backend application (Express + Mongoose)
 │   └── src/
 │       ├── server.js            Express app, Atlas connection, router mounting, /api/health
@@ -26,52 +56,88 @@ em-services-lift-servicing/
 └── README.md                    This file
 ```
 
-Per-student design and test documents live under a folder named after the student (placeholder: `student-name`), e.g.:
-- `design/student-name/use-cases.md`
-- `design/student-name/api-documentation.md`
-- `design/student-name/database-schema.md`
-- `frontend/tests/student-name/`
-- `backend/tests/student-name/`
+Per-student design and test documents live under a folder named after the student, e.g.:
+- `design/<student-name>/use-cases.md`
+- `design/<student-name>/api-documentation.md`
+- `design/<student-name>/database-schema.md`
+- `frontend/tests/<student-name>/`
+- `backend/tests/<student-name>/`
 
-A sibling directory, `em-services-lift-servicing-ai/`, stores each student's AI usage logs and reflection under their own `student-name` folder.
+A sibling directory, `em-services-lift-servicing-ai/`, stores each student's AI usage logs
+and reflection under their own `<student-name>` folder.
 
 ## Ownership Model
 
-The shared shell (tab switcher, upload hook, Express/Atlas setup, `/api/health`, Cloudinary signed-upload route) is common infrastructure — changes to it should be agreed on by the team rather than made unilaterally.
+The shared shell (tab switcher, upload hook, Express/Atlas setup, `/api/health`,
+Cloudinary signed-upload route, auth/RBAC, and the Admin/Master-only Audit Log) is common
+infrastructure — changes to it should be agreed on by the team rather than made
+unilaterally. The Audit Log (`backend/src/{controllers,routes}/auditLog/`,
+`frontend/src/features/audit-log/`) has no model of its own — it's a read-only view over
+the five feature models below, not a sixth owned feature.
 
 Everything else is owned per feature. Each feature has a matching folder in both apps:
 - `frontend/src/features/<feature>/`
 - `backend/src/models/<feature>/`, `backend/src/routes/<feature>/`, `backend/src/controllers/<feature>/`
 
-Fill in the owner for each feature below:
-
 | Feature | Owner |
 | --- | --- |
-| Lifts | TBD |
+| Lifts | Lucio |
 | Scheduling | Aeric |
 | Inspections | Javier |
-| Defects | TBD |
-| Rectifications | TBD |
+| Defects | Elijah |
+| Rectifications & Auth/RBAC | Ryan |
 
-Each owner is responsible for their feature's model, routes, controller, and frontend UI, and for mounting their router in `backend/src/server.js`.
+Each owner is responsible for their feature's model, routes, controller, and frontend UI,
+and for mounting their router in `backend/src/server.js`.
 
 ## Setup Instructions
+
+### Backend
+```
+cd backend
+cp .env.example .env
+# fill in DATABASE_URL, JWT_SECRET, and the CLOUDINARY_* values (see "Media Storage" below)
+npm install
+npm run seed   # seeds sample lifts/schedules/inspections + one login per role (see below)
+npm run dev
+```
 
 ### Frontend
 ```
 cd frontend
 cp .env.example .env
 npm install
-npm start
+npm run dev
 ```
 
-### Backend
+### Logging in for the first time
+
+There is no public sign-up in the UI — accounts are provisioned by a Master/Admin. Run
+`npm run seed` in `backend/` first, then log in with one of the sample accounts it creates
+(dev-only, printed to the console when the seed script runs):
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Master | `master@emservices.test` | `Passw0rd!` |
+| Admin | `alice.admin@emservices.test` | `Passw0rd!` |
+| Staff | `jessica.s@emservices.test` | `Passw0rd!` |
+
+Once logged in as Master or Admin, use the Accounts page to create real accounts.
+
+### Verifying it's running
+- Backend: `GET http://localhost:5000/api/health` → `{ "status": "ok" }`
+- Frontend: `npm run dev` → `http://localhost:3000` (port is fixed in `vite.config.js`)
+
+## Testing
+
 ```
-cd backend
-cp .env.example .env
-npm install
-npm start
+cd backend && npm test    # runs the full Jest suite (backend/tests/**)
+cd frontend && npm test   # runs the full Vitest suite (frontend/tests/**)
 ```
+
+Per-student suites can also be run individually, e.g. `npm run test:aeric`,
+`npm run test:javier` (see `package.json` in each app for the full list). Each student's
+`test-cases.md` alongside their tests documents what's covered.
 
 ## Media Storage
 
@@ -100,7 +166,16 @@ to upload a file: `const { uploadFile, uploading, progress } = useFileUpload();`
 `const url = await uploadFile(file, 'your-feature-folder')` - the optional `folder` argument
 just organizes uploads by feature in the Cloudinary dashboard (e.g. `"rectifications"`).
 
-## TODO
-- [ ] Fill in project overview
-- [ ] Fill in setup/run instructions once implemented
-- [ ] Link to design docs and deployment guide
+## Design Docs & Deployment
+
+- `design/architecture.md` + `design/architecture-diagram.md` — system architecture and component diagram
+- `design/er-diagram.md` — full entity-relationship diagram across all six collections
+- `design/<student-name>/` — per-feature use cases, API documentation, and database schema
+- `deployment.md` — hosting checklist and environment variable reference
+
+## Current Status / Known Gaps
+
+- **Deployment**: not yet deployed to a public host — `deployment.md` has the checklist but no live URL yet.
+- **Lucio's design docs and tests** (`design/Lucio/`, `backend/tests/Lucio/`, `frontend/tests/Lucio/`) are still outstanding for the Lifts feature, even though the feature itself is fully implemented.
+- **Architecture/ER diagrams**: both the Mermaid source and the exported `.png` files (`design/architecture-diagram.png`, `design/er-diagram.png`) are done. Note the PNGs were regenerated after the Audit Log feature was added to the Mermaid source — if you're viewing an older checkout, re-export to pick up the new Audit Log box.
+- **Audit Log has no committed automated test yet** — it was verified end-to-end during development (role restriction, merged/sorted output, action derivation, type filtering all checked against a real in-memory MongoDB), but that check wasn't kept as a permanent test file under `backend/tests/`. Worth adding one under whichever student's suite ends up owning shared-infrastructure coverage.

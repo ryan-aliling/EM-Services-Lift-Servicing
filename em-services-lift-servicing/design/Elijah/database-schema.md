@@ -8,7 +8,7 @@ Collection: `defects` (Mongoose model `Defect`, `backend/src/models/defects/Defe
 | Field | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `_id` | ObjectId | auto | — | Mongo-generated primary key. |
-| `defectNo` | String (trimmed, unique) | ✅ | — | System-assigned, e.g. `"DEF-0007"`. Derived from the current max in the collection rather than an ever-incrementing counter, so deleting the highest-numbered defect and creating a new one reissues that number instead of skipping ahead (same approach as `reportNo` on inspections). |
+| `defectNo` | String (trimmed) | ✅ | — | System-assigned, e.g. `"DEF-0007"`. Derived from the current max **among non-deleted** defects (not an ever-incrementing counter), so deleting the highest-numbered defect and creating a new one reissues that number instead of skipping ahead (same approach as `reportNo` on inspections). Uniqueness is enforced by a partial index, not a field-level `unique: true` — see Indexes below for why. |
 | `title` | String (trimmed) | ✅ | — | Short summary, e.g. "Door not closing fully". |
 | `description` | String (trimmed) | – | `''` | Free-text detail. |
 | `liftId` | ObjectId (ref `Lift`) | – | `null` | Optional link to a real lift asset — a defect can be logged against a general location before the specific lift is confirmed. |
@@ -25,7 +25,7 @@ Collection: `defects` (Mongoose model `Defect`, `backend/src/models/defects/Defe
 
 | Index | Purpose |
 | --- | --- |
-| `{ defectNo: 1 }` (unique) | Implicit from `unique: true` on the field — prevents two defects from ever sharing a defect number, and supports exact-match lookups by number. |
+| `{ defectNo: 1 }`, unique, **partial** (`partialFilterExpression: { isDeleted: false }`) | Prevents two *active* defects from ever sharing a defect number, while still letting a soft-deleted defect keep its original `defectNo` for the audit trail. A plain field-level `unique: true` was tried first and reverted — it made every reissue attempt fail with a duplicate-key error, since the soft-deleted document still physically held that `defectNo`. The partial index is what actually makes "deleting the highest-numbered defect and creating a new one reissues that number" true rather than aspirational. |
 
 No additional explicit indexes are defined yet. Unlike Scheduling (which indexes `scheduledDate` and `status` to support its list sort and filters), Defect Management's `status`/`severity`/`q` filters and `reportedDate` sort currently run against the collection's default index only — worth adding `{ reportedDate: -1 }`, `{ status: 1 }`, and `{ severity: 1 }` if the collection grows large enough for this to matter.
 
@@ -44,10 +44,15 @@ Inspection.defects[]                             [Inspections feature — a ligh
                                                    a routine walk-through — it has no required link
                                                    back to any specific Inspection document.]
 
-Defect ── expected upstream of ──▶ Rectification  [Rectifications feature — future/other student's
-                                                     work; owns the actual repair record. Defect
+Defect ──(1:many, required defectId)──▶ Rectification  [Rectifications feature (Ryan) — owns the
+                                                     actual repair record: proof photos, e-signature,
+                                                     and the Admin/Master endorsement step. Defect
                                                      Management only tracks that a defect exists and
-                                                     its current status, not how it gets fixed.]
+                                                     its current status, not how it gets fixed.
+                                                     Endorsing a Rectification advances the linked
+                                                     Defect's own status forward (Open→Closed,
+                                                     In Progress→Resolved) via the same
+                                                     VALID_TRANSITIONS map this feature enforces.]
 ```
 
 ## Data integrity rules enforced
@@ -55,7 +60,7 @@ Defect ── expected upstream of ──▶ Rectification  [Rectifications feat
 1. **Required fields** — `title`, `location`, and `severity` cannot be omitted (Mongoose `required: true`, re-checked in the controller for a friendlier 400 message).
 2. **Closed severity/status enums** — `severity` and `status` can only ever be one of their fixed known values (`Defect.DEFECT_SEVERITIES`, `Defect.DEFECT_STATUSES`); any other string is rejected by Mongoose validation.
 3. **Status transition map** — beyond the enum, `status` changes are further constrained by an explicit `VALID_TRANSITIONS` map checked at the controller layer (e.g. `Open` cannot jump straight to `Resolved`); this is stricter than what the enum alone would allow, and mirrors the same "no illegal jumps" principle used for inspection report `overallStatus`.
-4. **Unique, reissuable defect numbers** — `defectNo` is unique at the schema level, and reissued from the current max on each creation rather than monotonically incremented, so the numbering stays gap-free even after deletions.
+4. **Unique-among-active, reissuable defect numbers** — `defectNo` is unique only among non-deleted defects (partial index, see Indexes above), and reissued from the current max on each creation rather than monotonically incremented, so the numbering stays gap-free even after deletions.
 5. **Point-in-time lift snapshot, not a live join** — `liftCode` is captured once, when `liftId` is set, and does not update if the underlying lift record changes later.
-6. **No orphaned lift references** — if `liftId` is supplied (on create or update), it must resolve to an existing `Lift` document or the request is rejected with 400.
-7. **Hard delete, no audit trail** — `DELETE /api/defects/:id` permanently removes the document (`findByIdAndDelete`). This is a deliberate deviation from the soft-delete (`isDeleted`) convention used by Scheduling, and means deleted defects are not recoverable or auditable today — a known gap rather than an oversight, flagged here for whoever picks up data-integrity hardening next.
+6. **No orphaned or deleted lift references** — if `liftId` is supplied (on create or update), it must resolve to a real, **non-deleted** `Lift` document or the request is rejected with 400 ("Selected lift not found") — a soft-deleted lift can't be linked to a new defect any more than a nonexistent one can.
+7. **Soft delete, with a cascade** — `DELETE /api/defects/:id` (Admin/Master only; Staff gets 403) sets `isDeleted: true` rather than removing the document, matching every other model in the app, and cascades: any Rectification pointing at this defect is soft-deleted too (`cascadeFromDefects` in `backend/src/utils/cascadeDelete.js`). A soft-deleted defect keeps its original `defectNo` for the audit trail — see the partial index above for how that coexists with a *new* defect being allowed to reuse that same number.

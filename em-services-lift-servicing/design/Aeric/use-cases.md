@@ -93,5 +93,5 @@ Supervisor ── View Schedules by Status (filtered view of "View / Filter Sche
 
 - Every schedule requires `townCouncil`, `liftCompany`, `blockAddress`, and `scheduledDate` — no orphaned/incomplete records.
 - `status` is restricted to a fixed enum (`Schedule.STATUS_VALUES`), preventing free-text/invalid states.
-- `liftId` is an optional forward reference to the future Lifts feature — schedules are not blocked on Lifts being built first, but can be backfilled with a proper relationship later.
+- `liftId` is an optional reference to the Lifts feature (now built, owned by Lucio) — kept optional even after Lifts landed, since a schedule can exist before the exact lift is pinned down.
 - Soft delete (`isDeleted`) instead of hard delete, per client feedback on data integrity.

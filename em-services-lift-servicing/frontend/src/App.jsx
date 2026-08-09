@@ -23,11 +23,14 @@ const BASE_TABS = [
   { id: 'settings', label: 'Settings' },
 ];
 
-// Accounts tab only exists for Master/Admin - Staff never sees or can navigate to it (see
-// AccountsPage.jsx's own role check for defense in depth if a Staff user tries the URL
-// directly, but the backend is the real guard either way).
+// Accounts and Audit Log tabs only exist for Master/Admin - Staff never sees or can
+// navigate to either (see AccountsPage.jsx/AuditLogPage.jsx's own role checks for
+// defense in depth if a Staff user tries the URL directly, but the backend is the real
+// guard either way).
 export function getTabs(role) {
-  return isAdminOrMaster(role) ? [...BASE_TABS, { id: 'accounts', label: 'Accounts' }] : BASE_TABS;
+  return isAdminOrMaster(role)
+    ? [...BASE_TABS, { id: 'accounts', label: 'Accounts' }, { id: 'audit-log', label: 'Audit Log' }]
+    : BASE_TABS;
 }
 
 function initials(name = '') {

@@ -4,6 +4,7 @@ import Lifts from './features/lifts/Lifts';
 import LiftWorkflowPage from './features/lift-workflow/LiftWorkflowPage';
 import DashboardPage from './features/dashboard/DashboardPage';
 import AccountsPage from './features/accounts/AccountsPage';
+import AuditLogPage from './features/audit-log/AuditLogPage';
 import SettingsPage from './features/settings/SettingsPage';
 
 // Each feature owner mounts their page component here under their tab id.
@@ -19,6 +20,7 @@ const FEATURE_PAGES = {
   lifts: Lifts,
   'lift-workflow': LiftWorkflowPage,
   accounts: AccountsPage,
+  'audit-log': AuditLogPage,
   settings: SettingsPage,
 };
 

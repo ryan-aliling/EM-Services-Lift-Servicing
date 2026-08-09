@@ -44,7 +44,14 @@ export default function RectificationsStep({ lift }) {
     setDefectsLoading(true);
     return defectApi
       .fetchDefects()
-      .then((list) => setLiftDefects(list.filter((d) => d.liftId === lift._id)))
+      .then((list) =>
+        // "Open Defects for this Lift" means what it says - Resolved/Closed defects don't
+        // need a rectification logged against them anymore, so they're excluded here
+        // rather than just relying on the per-row button disabling itself.
+        setLiftDefects(
+          list.filter((d) => d.liftId === lift._id && (d.status === 'Open' || d.status === 'In Progress'))
+        )
+      )
       .catch(() => enqueueSnackbar('Failed to load defects for this lift', { variant: 'error' }))
       .finally(() => setDefectsLoading(false));
   };
@@ -238,6 +245,7 @@ export default function RectificationsStep({ lift }) {
         rectification={editingRectification}
         initialDefectId={prefilledDefectId}
         liftId={lift._id}
+        excludeDefectIds={rectifiedDefectIds}
         onClose={() => {
           setFormOpen(false);
           setEditingRectification(null);

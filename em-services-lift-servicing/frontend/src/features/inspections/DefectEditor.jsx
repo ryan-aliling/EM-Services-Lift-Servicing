@@ -41,7 +41,7 @@ export default function DefectEditor({ defects, onChange, readOnly, disabled, di
     setUploadError('');
     setUploadingIndex(index);
     try {
-      const url = await uploadFile(file, 'inspections');
+      const url = await uploadFile(file, 'inspections', { compress: true });
       update(index, 'photoUrl', url);
     } catch (err) {
       setUploadError(`Failed to upload ${file.name}: ${err.message}`);
