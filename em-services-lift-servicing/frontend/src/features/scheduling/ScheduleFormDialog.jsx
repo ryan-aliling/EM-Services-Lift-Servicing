@@ -10,12 +10,10 @@ import {
   DialogTitle,
   Grid,
   MenuItem,
-  Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import LiftSelect from '../lifts/LiftSelect';
-import { generateDraftNotes } from '../../api/scheduleApi';
 import { listUsers } from '../../api/authApi';
 import { SCHEDULE_STATUSES } from '../../utils/scheduleHelpers';
 
@@ -42,8 +40,6 @@ const schema = Yup.object({
 });
 
 export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, initialLiftId }) {
-  const [draftLoading, setDraftLoading] = useState(false);
-  const [localError, setLocalError] = useState(null);
   const [staffOptions, setStaffOptions] = useState([]);
 
   // This dialog only ever opens for Admin/Master (SchedulingStep.jsx gates the Add/Edit
@@ -92,40 +88,11 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
     }
   }
 
-  async function handleGenerateDraft() {
-    if (!formik.values.blockAddress) {
-      setLocalError('Fill in Block/Lift Address before generating a draft.');
-      return;
-    }
-
-    setDraftLoading(true);
-    setLocalError(null);
-    try {
-      const { notes } = await generateDraftNotes({
-        townCouncil: formik.values.townCouncil,
-        liftCompany: formik.values.liftCompany,
-        blockAddress: formik.values.blockAddress,
-        assignedInspector: formik.values.assignedInspector,
-      });
-      formik.setFieldValue('notes', notes);
-    } catch (err) {
-      setLocalError(err.response?.data?.message || 'Failed to generate draft');
-    } finally {
-      setDraftLoading(false);
-    }
-  }
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <form onSubmit={formik.handleSubmit}>
         <DialogTitle>{schedule ? 'Edit Schedule' : 'New Spot-Check Schedule'}</DialogTitle>
         <DialogContent dividers sx={{ pt: 3 }}>
-          {localError && (
-            <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-              {localError}
-            </Typography>
-          )}
-
           <Box sx={{ mb: 3 }}>
             <LiftSelect
               value={formik.values.liftId}
@@ -229,12 +196,9 @@ export default function ScheduleFormDialog({ open, schedule, onClose, onSubmit, 
             </Grid>
 
             <Grid item xs={12}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.75}>
-                <Typography variant="body2">Notes</Typography>
-                <Button size="small" onClick={handleGenerateDraft} disabled={draftLoading}>
-                  {draftLoading ? 'Generating…' : 'Generate Draft from AI'}
-                </Button>
-              </Stack>
+              <Typography variant="body2" mb={0.75}>
+                Notes
+              </Typography>
               <TextField
                 name="notes"
                 fullWidth

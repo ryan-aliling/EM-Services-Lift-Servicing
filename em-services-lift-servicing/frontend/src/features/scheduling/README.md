@@ -6,7 +6,7 @@ page it's mounted on is now the Scheduling step of the Lift Workflow tab
 
 | File | Purpose |
 | --- | --- |
-| `ScheduleFormDialog.jsx` | Create/edit dialog — formik + yup validation, lift linking (`LiftSelect`), AI draft notes. |
+| `ScheduleFormDialog.jsx` | Create/edit dialog — formik + yup validation, lift linking (`LiftSelect`). |
 | `ScheduleDetailsModal.jsx` | Read-only detail view — status stepper, "Generate PDF". |
 | `StatusStepper.jsx` | MUI `Stepper` showing progress through the workflow. |
 | `generateSchedulePdf.js` | Builds and downloads a one-page PDF record via `jspdf`. |
