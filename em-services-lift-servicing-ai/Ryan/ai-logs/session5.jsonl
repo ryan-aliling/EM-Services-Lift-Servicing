@@ -1,144 +1,203 @@
-{"phase":"design",
+{"phase":"coding",
 "prompt":
-"Build real user management and role-based access control for this app,
-replacing the currently-hardcoded dev auth. Three roles: Master, Admin,
-Staff (no Contractor role - out of scope for this pass).
+"Fix a data-isolation bug in the Lift Detail view: viewing any lift shows the
+same schedules/inspections/defects/rectifications as every other lift,
+because the backend ignores the lift filter the frontend already sends.
 
-## Role capabilities (final design - implement exactly this, don't
-## reinterpret)
+Confirmed root causes:
 
-- Master: creates any account (Admin or Staff). Full CRUD on Schedules,
-  Inspections, Defects, Rectifications, plus Endorse.
-- Admin: creates Staff accounts only (cannot create another Admin or a
-  Master). Full CRUD on Schedules (including creating and assigning them to
-  Staff), full CRUD + full visibility on Inspections/Defects/Rectifications
-  across every staff member, plus Endorse.
-- Staff: cannot manage any accounts.
-  - Schedules: read-only, and ONLY schedules assigned to them - EXCEPT they
-    CAN update just the `status` field (Scheduled/Assigned/In
-    Progress/Completed/Cancelled) on their own assigned schedules. They
-    cannot create, delete, or edit any other field (date, lift company,
-    town council, reassignment) on a schedule.
-  - Inspections: can create/edit, but only for a schedule assigned to them
-    (or with no schedule link at all, if that's already allowed).
-  - Defects: can log freely, not restricted to lifts/schedules assigned to
-    them.
-  - Rectifications: can create/submit. Cannot call the endorse endpoint
-    under any circumstance - that's Admin/Master only.
+1. `backend/src/controllers/scheduling/schedulingController.js` — `listSchedules`
+   only reads `{ status, date }` from req.query and never applies a `liftId`
+   filter, so `Schedule.find(filter)` returns every schedule.
 
-There is no 'Manager' role - retire that label entirely. Every place in the
-current codebase that checks `role === 'Admin' || role === 'Manager'`
-should become a proper 3-role check per the table above, not a straight
-find-and-replace of 'Manager' with 'Admin'.
+2. `backend/src/controllers/inspections/inspectionController.js` —
+   `listInspections` only reads `{ status, q }`, same missing `liftId` filter.
 
-## Backend
+3. `backend/src/controllers/defects/defectController.js` — `listDefects`
+   only reads `{ status, severity, q }`, same missing `liftId` filter.
 
-1. New User model (backend/src/models/users/User.js): name, email (unique),
-   passwordHash, role (enum: Master/Admin/Staff), createdBy (ref User, so
-   it's auditable who created each account), isDeleted (soft delete,
-   consistent with every other model in this app - see
-   backend/src/utils/cascadeDelete.js for the pattern), timestamps.
+4. `backend/src/controllers/rectifications/rectificationController.js` —
+   `listRectifications` reads no query params at all and always does
+   `Rectification.find({ isDeleted: false })`. Rectification has no direct
+   `liftId` field — it only links via `defectId` — so filtering by lift here
+   requires joining through the referenced Defect's `liftId`.
 
-2. Auth: bcrypt for password hashing, JWT for sessions. Endpoints:
-   POST /api/auth/login (email+password -> JWT with role/userId claims),
-   and account management endpoints (create/list/deactivate users) gated by
-   the account-creation rules above (Master creates anyone, Admin creates
-   Staff only, enforced server-side, not just hidden in the UI).
+5. Param name mismatch: the frontend (`LiftDetailDialog.jsx`) calls each
+   fetch with `{ lift: lift._id }`, but the Schedule/Defect/Inspection
+   models use the field name `liftId`. Standardize on `liftId` as the query
+   param name across frontend and backend so this doesn't silently
+   no-op again.
 
-3. Middleware: requireAuth + requireRole(...roles), wired into the routes
-   that already have a standing TODO for this:
-   - backend/src/routes/lifts/liftRoutes.js
-   - backend/src/routes/defects/defectsRoutes.js
-   - backend/src/routes/inspections/inspectionsRoutes.js
-   - backend/src/routes/rectifications/rectificationsRoutes.js (this one's
-     TODO specifically calls out restricting the endorse route further -
-     do that: PATCH /:id/endorse requires Admin or Master specifically, not
-     just 'can edit')
-   - backend/src/routes/scheduling/ currently has NO such TODO/comment at
-     all - add the same auth gating here too, it was apparently missed
-     when the other route files got their TODOs.
+6. `schedulingController.js` — `createSchedule` destructures req.body as
+   `{ townCouncil, liftCompany, blockAddress, scheduledDate, assignedInspector,
+   notes }` and never reads or stores `liftId`, even though
+   `ScheduleFormDialog.jsx` collects and submits it via `LiftSelect`. Fix
+   `createSchedule` to also destructure and persist `liftId`. Note:
+   `updateSchedule` already spreads req.body wholesale so it does persist
+   liftId on edits — only `createSchedule` needs the fix.
 
-4. Schedule model (backend/src/models/scheduling/Schedule.js): add
-   `assignedStaffId` (ObjectId ref User, nullable) as the real relational
-   link - the existing `assignedInspector` free-text field can stay as a
-   display snapshot (same pattern as liftCode/block snapshots elsewhere in
-   this codebase) but must no longer be the source of truth for access
-   control. Write a migration/backfill step (follow the pattern in
-   backend/src/utils/cascadeDelete.js's cleanupOrphans, or add to seed.js)
-   that maps existing `assignedInspector` name strings to real User
-   accounts where possible, and leaves `assignedStaffId: null` where it
-   can't confidently match - don't silently guess wrong.
+Required changes:
 
-5. Query scoping: listSchedules (schedulingController.js) must filter to
-   `assignedStaffId: req.user._id` when the caller's role is Staff (Admin/
-   Master see everything, unfiltered by this). updateSchedule must reject
-   any Staff-submitted field other than `status`, and reject entirely if
-   the schedule isn't assigned to that Staff user. createInspection
-   (inspectionController.js) must additionally verify, for a Staff caller,
-   that the referenced scheduleId's assignedStaffId matches their own user
-   id - this extends the existing assertScheduleMatchesLift check, doesn't
-   replace it.
+- Add `liftId` filtering to `listSchedules`, `listInspections`, and
+  `listDefects` (filter by `req.query.liftId` when present).
+- Add `liftId` filtering to `listRectifications` by resolving matching
+  Defect IDs for the given lift first (e.g. `Defect.find({ liftId }).distinct('_id')`)
+  and filtering Rectification by `defectId: { $in: ... }`.
+- Fix `createSchedule` to accept and store `liftId` from req.body.
+- Rename the frontend's fetch param from `lift` to `liftId` in
+  `LiftDetailDialog.jsx` (and anywhere else calling these four fetch
+  functions with the old `lift` key), so it matches the backend filter.
+- Flag as a known data gap (do NOT silently auto-fix without confirming):
+  any Schedule documents created before this fix will have `liftId: null`
+  and won't retroactively associate with a lift — note this in the PR/commit
+  description so the team can decide whether a backfill migration is needed.
+- Add/update tests covering: fetching schedules/inspections/defects/
+  rectifications scoped to a specific lift returns only that lift's records,
+  and that other lifts' records are excluded.
 
-## Frontend
+Do not change unrelated behavior (existing status/date/severity/q filters
+must keep working alongside the new liftId filter)",
+"output": "Rewrote the filter bar in LiftSearchScreen.jsx:
 
-1. Replace frontend/src/context/AuthContext.jsx's hardcoded dev user with
-   a real login flow: a login page, JWT stored (e.g. localStorage) and
-   attached as an Authorization header on every API call, and a logout
-   action.
-
-2. Update every `canEdit = user.role === 'Admin' || user.role ===
-   'Manager'` check (Lifts.jsx, InspectionsStep.jsx, DefectsStep.jsx,
-   RectificationsStep.jsx, SchedulingStep.jsx) to reflect the real 3-role
-   matrix above instead of a flat binary - e.g. SchedulingStep.jsx's 'Add
-   Schedule' button and full-field edit should be Admin/Master only, but
-   Staff still needs a way to update just the status of their own assigned
-   schedules (don't just hide everything behind the same old canEdit flag).
-
-3. EndorseButton.jsx should only render for Admin/Master, per its own
-   existing TODO comment.
-
-4. New account management screen: Master sees and can create
-   Admin+Staff, Admin sees and can create Staff only - enforce this in the
-   UI but rely on the backend enforcement above as the real guard, not this
-   screen.
-
-5. SchedulingStep.jsx / the Lift Workflow's schedule list should filter to
-   'assigned to me' automatically for a Staff-role user (the backend already
-   scopes the query, but make sure the UI doesn't imply they could see more).
-
-## Out of scope for this pass
-No Contractor/lift-company-facing role or portal - that's a separate,
-larger piece of work, not part of this prompt.
-
-## Testing
-Add tests covering: a Staff user cannot create/delete a schedule (403), can
-update only status on their own assigned schedule, cannot touch a schedule
-assigned to someone else, cannot call the endorse endpoint, and an Admin
-cannot create another Admin account (only Master can).",
-"output": "Backend
-New User model (backend/src/models/users/User.js): name/email(unique)/passwordHash/role(Master/Admin/Staff)/createdBy/isDeleted, following the app's existing soft-delete convention.
-Auth infra: utils/jwt.js (sign/verify, 8h expiry), middleware/auth.js (requireAuth re-checks the user isn't deactivated on every request; requireRole(...)), controllers/auth/authController.js + routes/auth/authRoutes.js mounted at /api/auth (login, me, create/list/deactivate users, with Master/Admin account-creation rules enforced server-side).
-server.js now fails fast if JWT_SECRET is unset (verified: exits immediately with a clear message).
-All 5 resource routers (lifts, defects, inspections, rectifications, scheduling) now have requireAuth/requireRole wired in per the matrix — replacing every stale TODO, including scheduling which had none at all.
-Schedule model: added assignedStaffId (real ref, indexed); schedulingController.js converted to the asyncHandler/ApiError pattern and now scopes listSchedules/getSchedule/updateSchedule to Staff ownership (confirmed additions: getSchedule ownership check, 404-not-403 to avoid leaking existence).
-inspectionController.js: new assertScheduleAssignedToStaff, applied to both createInspection and updateInspection (confirmed addition, closes the reassign-after-create loophole).
-backend/scripts/migrateAssignedStaff.js: standalone, idempotent, exact-name-match backfill (kept separate from seed.js deliberately, same reasoning as cleanupOrphans()).
-seed.js: seeds a Master, an Admin, and 4 Staff users whose names match existing assignedInspector strings, wiring assignedStaffId directly.
-Tests: new tests/Auth/ suite (12 cases covering every scenario you asked for) + shared testAuthHelper.js; updated the 4 real existing suites (Aeric/Javier/Elijah/Ryan) to send auth headers.
-Frontend
-Real login (AuthContext.jsx, LoginPage.jsx, AuthGate.jsx), JWT in localStorage, client.js request/response interceptors (401 → clear token + reload, except the login call itself), logout button in the header.
-utils/roles.js (ROLES, isAdminOrMaster) — every 'Manager' string is gone from the codebase; all 5 canEdit sites now express the real 3-way matrix (canCreateOrEdit / canManageFull / and Scheduling's canManageSchedule + canUpdateOwnStatus + isOwnSchedule).
-EndorseButton.jsx now Admin/Master-only.
-New Accounts screen (AccountsPage.jsx, AccountFormDialog.jsx, authApi.js), tab visible only to Admin/Master, with its own defense-in-depth role check.
-Verification
-Backend: 89/91 tests pass. The 2 failures are pre-existing bugs I found but did not introduce or fix (confirmed via git show HEAD) — nextReportNo/nextDefectNo don't filter isDeleted, so the 'reissue number after delete' tests were already broken before this change; out of scope for this RBAC pass, flagging for your awareness.
-Frontend: 73/73 tests pass, npm run build succeeds cleanly.
-Confirmed the server refuses to boot without JWT_SECRET.
-Nothing has been committed — this is all sitting in your working tree on feature/user-management for you to review.
-
-The RBAC implementation is already fully complete and verified — this isn't still at the planning stage. Here's where things actually stand:
-
-The design agent finished a while back; its plan was reviewed, clarified with you via three follow-up questions (Inspection notify-contractor/delete → Admin/Master only, GET /:id ownership check → added, updateInspection reassignment guard → added), written to C:\Users\User\.claude\plans\tender-hugging-blossom.md, and approved.
-Since approval, I implemented the entire plan: backend auth infra (User model, JWT, middleware, auth routes), Schedule/inspection controller scoping, the migration script, seed data, route gating across all 5 resource routers, new and updated test suites, and the full frontend (AuthContext, login flow, role helper, all 5 canEdit sites, EndorseButton, Accounts page).
-Verification is done: backend 89/91 tests passing (2 pre-existing unrelated bugs, not mine), frontend 73/73 passing, production build succeeds, and the JWT_SECRET fail-fast boot check is confirmed.",
+Status & Type → multi-select: converted from single-select TextField select to Select multiple with checkboxes + ListItemText, matching the exact pattern already used for the status filter in InspectionsStep.jsx (extracted into a small shared MultiSelectFilter component to avoid repeating it 4 times). Empty selection = "All statuses"/"All types" (no filtering), matching the old default.
+Manufacturer filter: multi-select, options computed via useMemo as the distinct non-empty manufacturer values in the loaded lifts array — not hardcoded.
+Block filter: same approach, distinct block values.
+Capacity range: min/max numeric TextFields (type='number', size='small', non-negative).
+Last serviced date range: from/to TextField type='date' pickers (matching the plain-HTML-date-input convention used elsewhere in this codebase — there's no @mui/x-date-pickers dependency here). A lift with no lastServiced is excluded once either bound is set, rather than silently matching.
+filteredLifts: updated to AND all filters together, with each multi-select OR'd internally (documented inline).
+Clear filters button: resets all nine filter states back to their EMPTY_FILTERS defaults in one click; disabled when no filter is active.
+Row-click-to-select and the 'Select' button/column are untouched; screen is still read-only.
+Filtering stays client-side, per the existing pattern — added a code comment flagging that this should move server-side (pagination/query-param filtering, which several other endpoints already support) if the lift directory grows large, rather than assuming it's fine forever.",
 "action":"accepted"}
+
+
+
+{"phase":"coding",
+"prompt":
+"Expand the search filters on the Lift Workflow search screen
+(frontend/src/features/lift-workflow/LiftSearchScreen.jsx) and make the
+categorical filters multi-select.
+
+Current state:
+- Only 3 filters exist: free-text `search` (matches liftCode/block/unit),
+  `statusFilter` (single-select dropdown), `typeFilter` (single-select
+  dropdown).
+- Filtering happens client-side in a `useMemo` over the full `lifts` array
+  already fetched via `liftApi.fetchLifts()`.
+- Lift fields available (see backend/src/models/lifts/Lift.js) but not yet
+  filterable: `manufacturer`, `capacity`, `installDate`, `lastServiced`.
+- `LIFT_TYPES` and `LIFT_STATUSES` enums come from
+  frontend/src/utils/liftHelpers.js.
+
+Required changes:
+
+1. Convert `statusFilter` and `typeFilter` from single-select `TextField
+   select` to multi-select controls (MUI `Select multiple` with checkboxes,
+   or `Autocomplete multiple` — match whatever multi-select pattern, if any,
+   is already used elsewhere in the app for consistency). Each should default
+   to 'all' (empty selection = no filtering on that field) and show selected
+   chips/summary text.
+
+2. Add a **manufacturer** filter — multi-select, options derived dynamically
+   from the distinct `manufacturer` values present in the loaded `lifts`
+   array (don't hardcode a list, since manufacturers aren't a fixed enum).
+
+3. Add a **block** filter — multi-select, options derived dynamically from
+   distinct `block` values in the loaded lifts (same reasoning as
+   manufacturer).
+
+4. Add a **capacity range** filter (min/max numeric inputs, or a slider) to
+   filter lifts by `capacity`.
+
+5. Add a **last serviced date range** filter (from/to date pickers) filtering
+   on `lastServiced`.
+
+6. Update the `filteredLifts` useMemo to apply all new filters using
+   'OR within a field, AND across fields' semantics — e.g. selecting
+   ['Active', 'Maintenance'] in status shows lifts matching either, but a
+   lift must also match the selected type(s)/manufacturer(s)/block(s)/
+   capacity range/date range simultaneously.
+
+7. Add a 'Clear filters' button that resets all filter state at once.
+
+8. Keep this screen read-only (no create/edit/delete) and keep the single-row
+   'Select' action / row-click-to-select behavior unchanged — this is a
+   filter/search enhancement only, not a change to the workflow's one-lift-
+   at-a-time selection model.
+
+9. Keep filtering client-side (consistent with the current implementation)
+   unless the lift list is expected to grow large enough that server-side
+   filtering/pagination becomes necessary — flag that tradeoff rather than
+   assuming it.
+
+Preserve existing styling conventions (MUI `size='small'`, `Stack` layout,
+`flexWrap`) and don't touch the DataGrid columns or the Lifts CRUD page —
+scope is limited to LiftSearchScreen.jsx's filter bar.",
+"output": "Fixed LiftWorkflowPage.jsx:
+
+Replaced the dead disabled={activeStep === 0} + decrement-only onClick with a handleBack function: on step 0 it calls setSelectedLift(null) (returning to LiftSearchScreen, same as 'Change Lift') and resets activeStep back to 0; on steps 1–3 it still just decrements activeStep as before.
+Removed the disabled prop entirely — 'Back' is now always actionable.
+Left 'Change Lift' untouched as a same-effect shortcut from any step.
+Icon/label/styling unchanged (ArrowBackIcon, 'Back', same Button with no variant).",
+"action":"accepted"}
+
+
+
+
+{"phase":"coding",
+"prompt":
+"The Lift Workflow (frontend/src/features/lift-workflow/) currently shows no
+sense of 'where is this lift at' or 'does anything here need attention' -
+you have to click through Scheduling -> Inspections -> Defects ->
+Rectifications and piece it together yourself.
+
+Add a small, high-signal status summary for the selected lift, surfaced on
+LiftWorkflowPage.jsx (and/or as a compact column on LiftSearchScreen.jsx's
+lift list) - NOT a dashboard. The goal is 'glance at this and know if
+something needs attention,' not a stats panel.
+
+Use judgment to pick 2-4 indicators that are genuinely actionable, from data
+already in the four workflow models (Schedule, Inspection, Defect,
+Rectification - see backend/src/models/*/*.js for exact fields/statuses,
+and backend/src/utils/cascadeDelete.js for how they link via
+liftId/scheduleId/inspectionId/defectId). Two examples of the kind of thing
+worth surfacing (not a required list, just illustrating the bar):
+  - Where this lift currently sits in the Schedule -> Inspection -> Defect
+    -> Rectification chain (its latest step).
+  - Something overdue or stuck (a spot-check past its scheduled date that
+    never completed, a defect sitting unresolved well past when it was
+    reported, a rectification submitted but never endorsed, etc.).
+
+Explicitly out of scope: don't add a metrics/analytics panel, don't repeat
+information already visible elsewhere on the page (e.g. the lift's own
+status chip already shown in the header), and don't add an indicator 'just
+because the data exist' - each one should answer a real question someone
+would actually ask before deciding what to do next with this lift. If in
+doubt about whether an indicator earns its place, leave it out.
+
+Keep it visually restrained - a short status line, a chip, or a small badge
+near the existing liftCode/block header on LiftWorkflowPage.jsx (see its
+current header Stack around line 41-50), not a new panel or dashboard
+section. Match existing UI conventions (StatusChip component, MUI Tooltip
+for explaining *why* something is flagged, the isServiceDue-style warning
+icon pattern already used elsewhere in the app).",
+"output": "Added a compact, two-part status summary to the Lift Workflow header (LiftWorkflowPage.jsx), next to the existing liftCode/block/unit/status chip:
+
+1. Stage chip (outlined, so it reads as secondary to the lift's own status chip) — answers 'where is this lift in the Schedule → Inspection → Defect → Rectification chain right now,' picked furthest-along-first so it always reflects the most operationally relevant thing:
+open defect(s) → awaiting rectification endorsement / rectification in draft → inspection in progress → spot-check pending → not yet scheduled → up to date.
+
+2. Warning icon + tooltip (only rendered when something's actually stuck) — answers 'is anything overdue,' listing every applicable reason:
+
+a spot-check past its scheduled date that's still open (reused the existing isOverdue helper from scheduleHelpers.js)
+a defect open past a severity-scaled grace period (Critical 3d / Major 7d / Minor 14d — a defect isn't automatically 'stuck' the instant it's logged)
+a rectification Submitted 7+ days ago with no endorsement yet
+New file useLiftWorkflowStatus.js fetches this one lift's slice of all four modules via the ?liftId= server-side filters (added in an earlier fix) and reduces them to those two indicators; it re-fetches whenever activeStep changes so stepping through the wizard picks up anything just created in the previous step.
+
+Scoped out on purpose, per the brief: no metrics panel, no repeat of the lift's own status chip, no indicator added 'because the data exists' (e.g. didn't add a raw open-defect-count badge separate from the stage chip, since the stage chip already leads with that when it's the most relevant fact). Also skipped the 'compact column on LiftSearchScreen' option — computing this per-row would mean fetching 4 collections per lift in the list (N+1), which conflicts with 'keep it high-signal, not a dashboard' and the list's existing pure-client-side-filter design; flagging that as a deliberate scope decision rather than an oversight.
+
+Verification: added frontend/tests/LiftWorkflow/useLiftWorkflowStatus.test.js (19 tests, all passing via new npm run test:workflow) covering the stage-priority logic and each attention-reason threshold; npm run build is clean.",
+"action":"accepted"}
+
+
+
+
