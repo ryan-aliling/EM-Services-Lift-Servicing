@@ -1,0 +1,15 @@
+{"phase": "frontend",
+ "prompt": "the action buttons in the lift details popup dont do anything, like 'view schedules' or 'view inspections' just go nowhere",
+ "output": "Root cause: those buttons aren't broken in isolation, they're pointing at routes that no longer exist. LiftDetailDialog.jsx's onClick handlers still call navigate('/scheduling'), navigate('/inspections'), navigate('/defects'), and navigate('/rectifications') - but the app was restructured at some point into a single unified LiftWorkflowPage (with Scheduling/Inspections/Defects/Rectifications as steps inside it, not separate top-level tabs/routes). Those four routes were never registered, so each click silently no-ops instead of erroring - that's why it looked like the button 'did nothing' rather than crashing.
+
+Two things need to line up for a fix: (1) the buttons need to navigate somewhere that exists, and (2) LiftWorkflowPage needs to actually pick up which lift and which step to land on, since right now it always starts blank (no lift selected, step 0) regardless of how you got there.
+
+Fix applied:
+- LiftDetailDialog.jsx - all four onClick handlers now call navigate('/lift-workflow', { state: { lift, step: N } }) (step 0=Scheduling, 1=Inspections, 2=Defects, 3=Rectifications) instead of the dead routes.
+- LiftWorkflowPage.jsx - now reads useLocation().state on mount and initializes selectedLift/activeStep from it (falling back to null/0 exactly as before when navigated to directly, e.g. from the sidebar with no state). This is a read-once-on-mount, not a subscription - the page has no other way in besides picking a lift from LiftSearchScreen, so there's no later state change that would need tracking.
+- App.jsx - had a stale code comment referencing navigate('/scheduling') as the deep-link example; updated it to /lift-workflow so it doesn't mislead the next person reading it.
+
+Verified: clicked through all four 'View' actions in LiftDetailDialog against a lift with existing schedule/inspection/defect/rectification records - each one now closes the dialog, lands on /lift-workflow with the right lift pre-selected and the matching step tab already active, instead of doing nothing.",
+ "action": "accepted help - applied directly",
+ "action-detail": "Committed as 'FIXED ACTION BUTTON' (beda0c8) - 3 files changed (App.jsx, LiftWorkflowPage.jsx, LiftDetailDialog.jsx), 14 insertions/7 deletions. No backend changes needed since this was purely a stale-route/missing-state issue on the frontend."
+}
