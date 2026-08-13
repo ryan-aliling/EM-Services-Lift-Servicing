@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { compressImage } from '../utils/compressImage';
+import { TOKEN_STORAGE_KEY } from '../api/client';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -24,9 +25,17 @@ export function useFileUpload() {
     try {
       const fileToUpload = compress ? await compressImage(file) : file;
 
+      // This request goes straight through fetch rather than the shared axios `client` (see
+      // api/client.js), so its request interceptor never runs - the Authorization header has
+      // to be attached by hand here, or requireAuth on the backend 401s before a signature is
+      // ever generated.
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
       const signRes = await fetch(`${API_BASE_URL}/api/uploads/signature`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(folder ? { folder } : {}),
       });
 
